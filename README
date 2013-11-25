@@ -26,7 +26,8 @@ METHODS
     max_procs
         This is the maximum number of child processes to maintain. If all
         processes are busy handling tasks, further calls to "process" in .
-        will yield until a process becomes available.
+        will yield until a process becomes available. If not specified,
+        defaults to the number of CPUs on the system.
 
     max_reqs
         If this is a positive number (defaults to 0), child processes will
