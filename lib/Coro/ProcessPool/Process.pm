@@ -14,6 +14,10 @@ use String::Escape qw(backslash);
 use Symbol qw(gensym);
 use Coro::ProcessPool::Util qw(encode decode $EOL);
 
+if ($^O eq 'MSWin32') {
+    die 'MSWin32 is not supported';
+}
+
 use fields qw(
     pid
     to_child

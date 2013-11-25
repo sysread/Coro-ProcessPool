@@ -8,6 +8,10 @@ use Coro::Channel;
 use Coro::Handle;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
 
+if ($^O eq 'MSWin32') {
+    die 'MSWin32 is not supported';
+}
+
 my $IN     = unblock *STDIN;
 my $OUT    = unblock *STDOUT;
 my $outbox = Coro::Channel->new();

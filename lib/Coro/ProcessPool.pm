@@ -13,6 +13,10 @@ use Coro::ProcessPool::Process;
 
 our $VERSION = 0.01;
 
+if ($^O eq 'MSWin32') {
+    die 'MSWin32 is not supported';
+}
+
 use fields qw(
     max_procs
     num_procs

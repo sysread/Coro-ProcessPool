@@ -5,7 +5,6 @@ use Coro;
 
 BEGIN { use AnyEvent::Impl::Perl }
 
-
 my $class = 'Coro::ProcessPool::Process';
 
 use_ok($class) or BAIL_OUT;

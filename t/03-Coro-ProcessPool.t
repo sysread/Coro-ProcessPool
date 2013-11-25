@@ -6,7 +6,6 @@ use Test::More;
 
 BEGIN { use AnyEvent::Impl::Perl }
 
-
 my $class = 'Coro::ProcessPool';
 
 use_ok($class) or BAIL_OUT;
