@@ -1,0 +1,18 @@
+Coro::ProcessPool
+=================
+
+Provides a light-weight process pool.
+
+    use Coro::ProcessPool;
+
+    my $pool = Coro::ProcessPool->new(
+        max_procs => 4,
+        max_reqs  => 100,
+    );
+
+    my %result;
+    foreach my $i (1 .. 1000) {
+        $result{$i} = $pool->process(sub { shift * 2 }, $i);
+    }
+
+    $pool->shutdown;

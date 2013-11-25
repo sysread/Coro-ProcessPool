@@ -11,6 +11,8 @@ use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::CPU;
 use Coro::ProcessPool::Process;
 
+our $VERSION = 0.01;
+
 use fields qw(
     max_procs
     num_procs
