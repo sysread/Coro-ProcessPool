@@ -11,7 +11,7 @@ use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::CPU;
 use Coro::ProcessPool::Process;
 
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';

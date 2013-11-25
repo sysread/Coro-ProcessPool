@@ -1,2 +1,7 @@
+0.02    2013-11-25
+    * Miscellaneous bugfixes
+    * POD updates
+    * Added die() statements to prevent unsafe running on MSWin32
+
 0.01    2013-11-25
     * Initial release
