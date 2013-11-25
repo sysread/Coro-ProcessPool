@@ -23,17 +23,17 @@ METHODS
   new
     Creates a new process pool. Processes will be spawned as needed.
 
-  max_procs
-    This is the maximum number of child processes to maintain. If all
-    processes are busy handling tasks, further calls to "process" in . will
-    yield until a process becomes available.
+    max_procs
+        This is the maximum number of child processes to maintain. If all
+        processes are busy handling tasks, further calls to "process" in .
+        will yield until a process becomes available.
 
-  max_reqs
-    If this is a positive number (defaults to 0), child processes will be
-    terminated and replaced after handling "max_reqs" tasks. Choosing the
-    correct value for "max_reqs" is a tradeoff between the need to clear
-    memory leaks in the child process and the time it takes to spawn a new
-    process and import any packages used by client code.
+    max_reqs
+        If this is a positive number (defaults to 0), child processes will
+        be terminated and replaced after handling "max_reqs" tasks. Choosing
+        the correct value for "max_reqs" is a tradeoff between the need to
+        clear memory leaks in the child process and the time it takes to
+        spawn a new process and import any packages used by client code.
 
   process($f, $args)
     Processes code ref $f in a child process from the pool. If $args is

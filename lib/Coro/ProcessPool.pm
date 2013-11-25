@@ -128,19 +128,23 @@ Processes tasks using a pool of external Perl processes.
 
 Creates a new process pool. Processes will be spawned as needed.
 
-=head2 max_procs
+=over
+
+=item max_procs
 
 This is the maximum number of child processes to maintain. If all processes are
 busy handling tasks, further calls to L<./process> will yield until a process
 becomes available.
 
-=head2 max_reqs
+=item max_reqs
 
 If this is a positive number (defaults to 0), child processes will be
 terminated and replaced after handling C<max_reqs> tasks. Choosing the correct
 value for C<max_reqs> is a tradeoff between the need to clear memory leaks in
 the child process and the time it takes to spawn a new process and import any
 packages used by client code.
+
+=back
 
 =head2 process($f, $args)
 
