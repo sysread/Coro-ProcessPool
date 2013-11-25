@@ -1,3 +1,6 @@
+0.03
+    * Replaced Sys::CPU with Sys::Info
+
 0.02    2013-11-25
     * Miscellaneous bugfixes
     * POD updates

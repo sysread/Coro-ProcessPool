@@ -11,6 +11,7 @@ my $class = 'Coro::ProcessPool';
 use_ok($class) or BAIL_OUT;
 
 my $proc = new_ok($class, [ max_reqs => 5 ]);
+ok($proc->{max_procs} > 0, "max procs set automatically ($proc->{max_procs})");
 
 my $count = 100;
 my @threads;

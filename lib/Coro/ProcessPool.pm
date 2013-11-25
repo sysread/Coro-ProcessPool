@@ -8,7 +8,7 @@ use Coro;
 use Coro::Channel;
 use Coro::Storable qw(freeze thaw);
 use MIME::Base64 qw(encode_base64 decode_base64);
-use Sys::CPU;
+use Sys::Info;
 use Coro::ProcessPool::Process;
 
 our $VERSION = 0.02;
@@ -29,11 +29,19 @@ use fields qw(
 sub new {
     my ($class, %param) = @_;
     my $self = fields::new($class);
-    $self->{max_procs} = $param{max_procs} || Sys::CPU::cpu_count();
+    $self->{max_procs} = $param{max_procs} || _cpu_count();
     $self->{max_reqs}  = $param{max_reqs}  || 0;
     $self->{num_procs} = 0;
     $self->{procs}     = Coro::Channel->new();
     return $self;
+}
+
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
+sub _cpu_count {
+    my $info = Sys::Info->new();
+    my $cpu  = $info->device('CPU');
+    return $cpu->count;
 }
 
 #-------------------------------------------------------------------------------
@@ -138,7 +146,8 @@ Creates a new process pool. Processes will be spawned as needed.
 
 This is the maximum number of child processes to maintain. If all processes are
 busy handling tasks, further calls to L<./process> will yield until a process
-becomes available.
+becomes available. If not specified, defaults to the number of CPUs on the
+system.
 
 =item max_reqs
 
