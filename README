@@ -51,6 +51,20 @@ METHODS
     calling this method, the pool is effectively in a new state and may be
     used normally.
 
+COMPATIBILITY
+    "Coro::ProcessPool" will likely break on Win32 due to missing support
+    for non-blocking file descriptors (Win32 can only call "select" and
+    "poll" on actual network sockets). Without rewriting this as a network
+    server, which would impact performance and be really annoying, it is
+    likely this module will not support Win32 in the near future.
+
+    The following modules will get you started if you wish to explore a
+    synchronous process pool on Windows:
+
+    Win32::Process
+    Win32::IPC
+    Win32::Pipe
+
 AUTHOR
     Jeff Ober mailto:jeffober@gmail.com
 
