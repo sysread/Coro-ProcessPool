@@ -67,7 +67,7 @@ COMPATIBILITY
     Win32::Pipe
 
 AUTHOR
-    Jeff Ober mailto:jeffober@gmail.com
+    Jeff Ober <jeffober@gmail.com>
 
 LICENSE
     BSD License

@@ -198,7 +198,7 @@ process pool on Windows:
 
 =head1 AUTHOR
 
-Jeff Ober mailto:jeffober@gmail.com
+Jeff Ober <jeffober@gmail.com>
 
 =head1 LICENSE
 
