@@ -125,7 +125,7 @@ Coro::ProcessPool - an asynchronous process pool
 
     my %result;
     foreach my $i (1 .. 1000) {
-        $result{$i} = $pool->process(sub { shift * 2 }, $i);
+        $result{$i} = $pool->process(sub { shift * 2 }, [$i]);
     }
 
     $pool->shutdown;
