@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Carp;
 
+use AnyEvent;
 use Coro;
 use Coro::Channel;
 use Coro::Storable qw(freeze thaw);
@@ -24,8 +25,6 @@ use fields qw(
     procs
 );
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub new {
     my ($class, %param) = @_;
     my $self = fields::new($class);
@@ -36,16 +35,12 @@ sub new {
     return $self;
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub _cpu_count {
     my $info = Sys::Info->new();
     my $cpu  = $info->device('CPU');
     return $cpu->count;
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub shutdown {
     my $self = shift;
     for (1 .. $self->{num_procs}) {
@@ -69,8 +64,6 @@ sub kill_proc {
     --$self->{num_procs};
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub process {
     my ($self, $f, $args) = @_;
     ref $f eq 'CODE' || croak 'expected CODE ref to execute';
@@ -103,8 +96,43 @@ sub process {
     }
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
+sub map {
+    my ($self, $f, @args) = @_;
+
+    my @results;
+    my @threads;
+
+    foreach my $i (0 .. $#args) {
+        push @threads, async {
+            $results[$i] = [ process(@_) ];
+        } $self, $f, [$args[$i]];
+    }
+
+    $_->join foreach @threads;
+
+    return map { @$_ } @results;
+}
+
+sub defer {
+    my ($self, $f, $args) = @_;
+    my $arr = wantarray;
+    my $cv  = AnyEvent->condvar;
+
+    async_pool {
+        if ($arr) {
+            my @results = eval { process(@_) };
+            $cv->croak($@) if $@;
+            $cv->send(@results);
+        } else {
+            my $result = eval { process(@_) };
+            $cv->croak($@) if $@;
+            $cv->send($result);
+        }
+    } $self, $f, $args;
+
+    return sub { $cv->recv };
+}
+
 sub DESTROY { $_[0]->shutdown }
 
 1;
@@ -123,9 +151,21 @@ Coro::ProcessPool - an asynchronous process pool
         max_reqs  => 100,
     );
 
+    my $double = sub { $_[0] * 2 };
+
+    # Process in sequence
     my %result;
     foreach my $i (1 .. 1000) {
-        $result{$i} = $pool->process(sub { shift * 2 }, [$i]);
+        $result{$i} = $pool->process($double, [$i]);
+    }
+
+    # Process as a batch
+    my @results = $pool->map($double, 1 .. 1000);
+
+    # Defer waiting for result
+    my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
+    foreach my $i (keys %deferred) {
+        print "$i = " . $deferred{$i}->() . "\n";
     }
 
     $pool->shutdown;
@@ -169,6 +209,22 @@ This call will yield until the results become available. If all processes are
 busy, this method will block until one becomes available. Processes are spawned
 as needed, up to C<max_procs>, from this method. Also note that the use of
 C<max_reqs> can cause this method to yield while a new process is spawned.
+
+=head2 map($f, @args)
+
+Applies C<$f> to each value in C<@args> in turn and returns a list of the
+results. Although the order in which each argument is processed is not
+guaranteed, the results are guaranteed to be in the same order as C<@args>,
+even if the result of calling C<$f> returns a list itself (in which case, the
+results of that calcuation is flattened into the list returned by C<map>.
+
+=head2 defer($f, $args)
+
+Similar to L<./process>, but returns immediately. The return value is a code
+reference that, when called, returns the results of calling C<$f->(@$args)>.
+
+    my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
+    my $result   = $deferred->();
 
 =head2 shutdown
 
