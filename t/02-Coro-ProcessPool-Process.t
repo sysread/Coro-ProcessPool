@@ -7,18 +7,22 @@ BEGIN { use AnyEvent::Impl::Perl }
 
 my $class = 'Coro::ProcessPool::Process';
 
-use_ok($class) or BAIL_OUT;
+SKIP: {
+    skip 'does not run under MSWin32' if $^O eq 'MSWin32';
 
-my $proc = new_ok($class);
+    use_ok($class) or BAIL_OUT;
 
-ok($proc->spawn, 'spawn');
+    my $proc = new_ok($class);
 
-foreach my $i (1 .. 10) {
-    ok($proc->send(sub { $_[0] * 2 }, [$i]), "send ($i)");
-    ok(my $reply = $proc->recv, "recv ($i)");
-    is($reply, $i * 2, "receives expected result ($i)");
-}
+    ok($proc->spawn, 'spawn');
 
-ok($proc->terminate, 'terminate');
+    foreach my $i (1 .. 10) {
+        ok($proc->send(sub { $_[0] * 2 }, [$i]), "send ($i)");
+        ok(my $reply = $proc->recv, "recv ($i)");
+        is($reply, $i * 2, "receives expected result ($i)");
+    }
+
+    ok($proc->terminate, 'terminate');
+};
 
 done_testing;
