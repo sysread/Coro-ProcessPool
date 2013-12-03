@@ -8,6 +8,7 @@ use AnyEvent;
 use Coro;
 use Coro::Channel;
 use Coro::Storable qw(freeze thaw);
+use Guard qw(scope_guard);
 use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
 use Coro::ProcessPool::Process;
@@ -82,18 +83,9 @@ sub process {
         $proc = $self->start_proc;
     }
 
-    my $result = eval {
-        $proc->send($f, $args);
-        $proc->recv;
-    };
-
-    $self->{procs}->put($proc);
-
-    if ($@) {
-        croak $@;
-    } else {
-        return $result;
-    }
+    scope_guard { $self->{procs}->put($proc) };
+    $proc->send($f, $args);
+    return $proc->recv;
 }
 
 sub map {

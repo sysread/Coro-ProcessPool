@@ -19,6 +19,7 @@ WriteMakefile(
         'Coro'           => 0,
         'String::Escape' => 0,
         'Sys::Info'      => 0,
+        'Guard'          => 0,
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,

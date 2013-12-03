@@ -1,6 +1,8 @@
 0.04
     * Fixed documentation errors
     * Added map()
+    * Added defer()
+    * +added awesomeness using Guard module
 
 0.03    2013-11-25
     * Replaced Sys::CPU with Sys::Info

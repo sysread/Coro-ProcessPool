@@ -12,8 +12,6 @@ our @EXPORT_OK = qw(encode decode $EOL);
 
 const our $EOL => "\n";
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub encode {
     local $Storable::Deparse = 1;
     my $ref  = shift or croak 'expected reference';
@@ -21,8 +19,6 @@ sub encode {
     return encode_base64($data, '');
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
 sub decode {
     local $Storable::Eval = 1;
     my $line = shift or croak 'expected line';
