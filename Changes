@@ -1,3 +1,6 @@
+0.06
+    * Fixed unintentional MSWin32 errors due to imports in tests
+
 0.05   2013-12-03
     * Updated documentation
 

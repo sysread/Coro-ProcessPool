@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use Test::More;
-use Coro::ProcessPool;
 
 BEGIN { use AnyEvent::Impl::Perl }
 
