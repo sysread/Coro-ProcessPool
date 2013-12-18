@@ -123,15 +123,16 @@ sub terminate {
 
 sub send {
     my ($self, $f, $args) = @_;
-    croak 'not running' unless $self->is_running;
     $args ||= [];
     my $line = encode([$f, $args]);
+    $self->writable;
     $self->{to_child}->print($line . $EOL);
 }
 
 sub recv {
     my $self = shift;
-    croak 'not running' unless $self->is_running;
+    $self->readable;
+
     my $line = $self->{from_child}->readline($EOL);
     my $data = decode($line);
 
@@ -142,6 +143,18 @@ sub recv {
     } else {
         return $data->[1];
     }
+}
+
+sub readable {
+    my $self = shift;
+    croak 'not running' unless $self->is_running;
+    $self->{from_child}->readable;
+}
+
+sub writable {
+    my $self = shift;
+    croak 'not running' unless $self->is_running;
+    $self->{to_child}->writable;
 }
 
 1;
