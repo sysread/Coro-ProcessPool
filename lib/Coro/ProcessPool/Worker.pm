@@ -20,16 +20,9 @@ my $OUT = unblock *STDOUT;
 
 sub start {
     my $class   = shift;
-    my $outbox  = Coro::Channel->new();
     my $inbox   = Coro::Channel->new();
+    my $outbox  = Coro::Channel->new();
     my $running = 1;
-
-    my $out_worker = async {
-        while (1) {
-            my $line = $outbox->get or last;
-            $OUT->print($line . $EOL);
-        }
-    };
 
     my $in_worker = async {
         while (1) {
@@ -41,6 +34,13 @@ sub start {
         $running = 0;
     };
 
+    my $out_worker = async {
+        while (1) {
+            my $line = $outbox->get or last;
+            $OUT->print($line . $EOL);
+        }
+    };
+
     my $proc_worker = async {
         while (1) {
             my $line  = $inbox->get or last;
@@ -50,17 +50,17 @@ sub start {
         }
     };
 
+    scope_guard {
+        $inbox->shutdown;
+        $in_worker->join;
+
+        $outbox->shutdown;
+        $out_worker->join;
+    };
+
     while ($running) {
         Coro::AnyEvent::sleep $TIMEOUT;
     }
-
-    $inbox->shutdown;
-    $in_worker->join;
-
-    $outbox->shutdown;
-    $out_worker->join;
-
-    exit 0;
 }
 
 sub process_task {
