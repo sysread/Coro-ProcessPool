@@ -5,12 +5,12 @@ use warnings;
 use Carp;
 
 use AnyEvent;
-use Coro;
 use Coro::Channel;
+use Coro::ProcessPool::Process;
 use Coro::Storable qw(freeze thaw);
+use Coro;
 use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
-use Coro::ProcessPool::Process;
 
 our $VERSION = 0.06;
 
@@ -87,14 +87,25 @@ sub process {
     }
 
     # Send the task
-    $proc->send($f, $args);
+    eval { $proc->send($f, $args) };
 
-    # Replace process in the pool as soon as result is ready on the connection
-    $proc->readable;
-    $self->{procs}->put($proc);
+    if ($@) {
+        # In the event of an error communicating with the process, assume the
+        # process is in an error state and replace it. Once the new process is
+        # returned to the pool, croak with the original error message.
+        my $error = $@;
+        $self->kill_proc($proc);
+        $proc = $self->start_proc;
+        $self->{procs}->put($proc);
+        croak $error;
+    } else {
+        # Replace process in the pool as soon as result is ready on the connection
+        $proc->readable;
+        $self->{procs}->put($proc);
 
-    # Collect and return the result
-    return $proc->recv;
+        # Collect and return the result
+        return $proc->recv;
+    }
 }
 
 sub map {
