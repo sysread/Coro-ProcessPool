@@ -14,14 +14,14 @@ const our $EOL => "\n";
 
 sub encode {
     local $Storable::Deparse = 1;
-    my $ref  = shift or croak 'expected reference';
+    my $ref  = shift or croak 'encode: expected reference';
     my $data = freeze($ref);
     return encode_base64($data, '');
 }
 
 sub decode {
     local $Storable::Eval = 1;
-    my $line = shift or croak 'expected line';
+    my $line = shift or croak 'decode: expected line';
     my $data = decode_base64($line) or croak 'invalid data';
     return thaw($data);
 }

@@ -2,7 +2,11 @@ use strict;
 use warnings;
 use List::Util qw(shuffle);
 use Coro;
+use Coro::AnyEvent;
 use Test::More;
+use Guard;
+use Test::TinyMocker;
+use Coro::Channel;
 
 BEGIN { use AnyEvent::Impl::Perl }
 
@@ -17,6 +21,49 @@ SKIP: {
     ok($pool->{max_procs} > 0, "max procs set automatically ($pool->{max_procs})");
 
     my $doubler = sub { $_[0] * 2 };
+
+    subtest 'checkout_proc' => sub {
+        my @procs;
+
+        # Checkout with no processes created
+        foreach (1 .. $pool->{max_procs}) {
+            my $proc = $pool->checkout_proc;
+            ok(defined $proc, 'new process spawned and acquired');
+            isa_ok($proc, 'Coro::ProcessPool::Process');
+            push @procs, $proc;
+        }
+
+        $pool->checkin_proc($_) foreach @procs;
+
+        # Checkout with all processes created
+        {
+            my $proc = $pool->checkout_proc;
+            ok(defined $proc, 'previously spawned process acquired');
+            isa_ok($proc, 'Coro::ProcessPool::Process');
+            $pool->checkin_proc($proc);
+        }
+
+        # Checkout with timeouts
+        {
+            my $proc = $pool->checkout_proc(1);
+            ok(defined $proc, 'process acquired with timeout');
+            isa_ok($proc, 'Coro::ProcessPool::Process');
+            $pool->checkin_proc($proc);
+        }
+
+        {
+            mock 'Coro::Channel', 'get', sub { Coro::AnyEvent::sleep 3 };
+            scope_guard { unmock 'Coro::Channel', 'get' };
+
+            my $start = time;
+            eval { $pool->checkout_proc(1) };
+            my $taken = time - $start;
+
+            ok($@, 'error thrown after timeout');
+            ok($@ =~ 'timed out', 'expected error');
+            is(sprintf('%d', $taken), 1, 'correct seconds passed for timeout');
+        }
+    };
 
     subtest 'process' => sub {
         my $count = 20;

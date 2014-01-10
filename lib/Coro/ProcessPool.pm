@@ -5,6 +5,7 @@ use warnings;
 use Carp;
 
 use AnyEvent;
+use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Coro::Storable qw(freeze thaw);
@@ -64,21 +65,53 @@ sub kill_proc {
     --$self->{num_procs};
 }
 
+sub checkin_proc {
+    my ($self, $proc) = @_;
+    $self->{procs}->put($proc);
+}
+
+sub checkout_proc {
+    my ($self, $timeout) = @_;
+
+    # Start a new process if none are available and there are worker slots open
+    if ($self->{procs}->size == 0 && $self->{num_procs} < $self->{max_procs}) {
+        return $self->start_proc;
+    }
+
+    if (!defined $timeout) {
+        return $self->{procs}->get;
+    } else {
+        my $cv = AnyEvent->condvar;
+        my $proc;
+
+        my $thread_timer = async {
+            Coro::AnyEvent::sleep $timeout;
+            $cv->send(0);
+        };
+
+        my $thread_proc = async {
+            $proc = $self->{procs}->get;
+            $cv->send(1);
+        };
+
+        my $result = $cv->recv;
+
+        if ($result) {
+            $thread_timer->cancel;
+            return $proc;
+        } else {
+            croak 'timed out waiting for available process';
+        }
+    }
+}
+
 sub process {
-    my ($self, $f, $args) = @_;
+    my ($self, $f, $args, $timeout) = @_;
     ref $f eq 'CODE' || croak 'expected CODE ref to execute';
     $args ||= [];
     ref $args eq 'ARRAY' || croak 'expected ARRAY ref of arguments';
 
-    my $proc;
-
-    # Start a new process if none are available and there are worker slots open
-    if ($self->{procs}->size == 0 && $self->{num_procs} < $self->{max_procs}) {
-        $proc = $self->start_proc;
-    }
-
-    # Otherwise, wait for the next available process
-    $proc = $self->{procs}->get unless defined $proc;
+    my $proc = $self->checkout_proc($timeout);
 
     # Restart the process if the worker is exhausted
     if ($self->{max_reqs} > 0 && $proc->{processed} >= $self->{max_reqs}) {
@@ -87,25 +120,14 @@ sub process {
     }
 
     # Send the task
-    eval { $proc->send($f, $args) };
+    $proc->send($f, $args);
 
-    if ($@) {
-        # In the event of an error communicating with the process, assume the
-        # process is in an error state and replace it. Once the new process is
-        # returned to the pool, croak with the original error message.
-        my $error = $@;
-        $self->kill_proc($proc);
-        $proc = $self->start_proc;
-        $self->{procs}->put($proc);
-        croak $error;
-    } else {
-        # Replace process in the pool as soon as result is ready on the connection
-        $proc->readable;
-        $self->{procs}->put($proc);
+    # Replace process in the pool as soon as result is ready on the connection
+    $proc->readable;
+    $self->{procs}->put($proc);
 
-        # Collect and return the result
-        return $proc->recv;
-    }
+    # Collect and return the result
+    return $proc->recv;
 }
 
 sub map {
@@ -211,7 +233,7 @@ packages used by client code.
 
 =back
 
-=head2 process($f, $args)
+=head2 process($f, $args, $timeout)
 
 Processes code ref C<$f> in a child process from the pool. If C<$args> is
 provided, it is an array ref of arguments that will be passed to C<$f>. Returns
@@ -221,6 +243,13 @@ This call will yield until the results become available. If all processes are
 busy, this method will block until one becomes available. Processes are spawned
 as needed, up to C<max_procs>, from this method. Also note that the use of
 C<max_reqs> can cause this method to yield while a new process is spawned.
+
+A timeout may be optionally specified in fractional seconds. If specified,
+C<$timeout> will cause C<process> to croak if C<$timeout> seconds pass an no
+process becomes available to handle the task.
+
+Note that the timeout only applies to the time it takes to acquire an available
+process. It does not watch the time it takes to perform the task.
 
 =head2 map($f, @args)
 
@@ -242,6 +271,45 @@ reference that, when called, returns the results of calling C<$f->(@$args)>.
 
 Shuts down all processes and resets state on the process pool. After calling
 this method, the pool is effectively in a new state and may be used normally.
+
+=head1 A NOTE ABOUT IMPORTS AND CLOSURES
+
+Code refs are serialized using L<Storable> to pass them to the worker
+processes. Once deserialized in the pool process, these functions can no
+longer see the stack as it is in the parent process. Therefore, imports and
+variables external to the function are unavailable.
+
+Something like this will not work:
+
+    use Foo;
+    my $foo = Foo->new();
+
+    my $result = $pool->process(sub {
+        return $foo->bar; # $foo not found
+    });
+
+Nor will this:
+
+    use Foo;
+    my $result = $pool->process(sub {
+        my $foo = Foo->new; # Foo not found
+        return $foo->bar;
+    });
+
+The correct way to do this is to import from within the function:
+
+    my $result = $pool->process(sub {
+        use Foo;
+        my $foo = Foo->new();
+        return $foo->bar;
+    });
+
+...or to pass in external variables that are needed by the function:
+
+    use Foo;
+    my $foo = Foo->new();
+
+    my $result = $pool->process(sub { $_[0]->bar }, [ $foo ]);
 
 =head1 COMPATIBILITY
 

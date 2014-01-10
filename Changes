@@ -1,3 +1,6 @@
+0.07    2014-??-??
+    * Added timeout parameter to process()
+
 0.06    2013-12-18
     * Fixed unintentional MSWin32 errors due to imports in tests
     * More efficient I/O workflow to allow higher throughput
