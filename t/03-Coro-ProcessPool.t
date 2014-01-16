@@ -54,14 +54,9 @@ SKIP: {
         {
             mock 'Coro::Channel', 'get', sub { Coro::AnyEvent::sleep 3 };
             scope_guard { unmock 'Coro::Channel', 'get' };
-
-            my $start = time;
             eval { $pool->checkout_proc(1) };
-            my $taken = time - $start;
-
             ok($@, 'error thrown after timeout');
             ok($@ =~ 'timed out', 'expected error');
-            is(sprintf('%d', $taken), 1, 'correct seconds passed for timeout');
         }
     };
 
