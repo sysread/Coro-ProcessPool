@@ -13,11 +13,13 @@ use Coro;
 use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
 
-our $VERSION = 0.08;
+our $VERSION = 0.09;
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
+
+our $CPU_COUNT = _cpu_count();
 
 use fields qw(
     max_procs
@@ -29,7 +31,8 @@ use fields qw(
 sub new {
     my ($class, %param) = @_;
     my $self = fields::new($class);
-    $self->{max_procs} = $param{max_procs} || _cpu_count();
+
+    $self->{max_procs} = $param{max_procs} || $CPU_COUNT;
     $self->{max_reqs}  = $param{max_reqs}  || 0;
     $self->{num_procs} = 0;
     $self->{procs}     = Coro::Channel->new();
@@ -39,7 +42,7 @@ sub new {
 sub _cpu_count {
     my $info = Sys::Info->new();
     my $cpu  = $info->device('CPU');
-    return $cpu->count;
+    return $cpu->count || 4; # default to 4 if Sys::Info fails
 }
 
 sub shutdown {
