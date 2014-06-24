@@ -25,9 +25,16 @@ use fields qw(
     child_err
     child_err_mon
     processed
+    inbox
+    inbox_mon
 );
 
-sub DESTROY { $_[0]->terminate(1) if $_[0] }
+sub DESTROY {
+    if ($_[0] && $_[0]->{pid}) {
+        $_[0]->terminate(1);
+        $_[0]->cleanup;
+    }
+}
 
 sub new {
     my ($class, %param) = @_;
@@ -73,11 +80,20 @@ sub spawn {
     $self->{from_child} = unblock $r;
     $self->{child_err}  = unblock $e;
     $self->{processed}  = 0;
+    $self->{inbox}      = Coro::Channel->new();
 
     $self->{child_err_mon} = async {
         while (my $line = $self->{child_err}->readline) {
             warn "(WORKER) $line";
         }
+    };
+
+    $self->{inbox_mon} = async {
+        while (my $line = $self->{from_child}->readline($EOL)) {
+            $self->{inbox}->put($line);
+        }
+
+        $self->{inbox}->shutdown;
     };
 
     return $pid;
@@ -94,7 +110,17 @@ sub terminate {
     my ($self, $block) = @_;
     my $pid = $self->{pid};
 
-    if ($self->is_running && $pid) {
+    if ($self->is_running) {
+        $self->{from_child}->close;
+        $self->{to_child}->close;
+        $self->{child_err}->close;
+
+        $self->{inbox_mon}->safe_cancel;
+        $self->{inbox_mon}->join;
+
+        $self->{child_err_mon}->safe_cancel;
+        $self->{child_err_mon}->join;
+
         if (kill(0, $pid)) {
             warn("Error killing pid %d: %s", $pid, $!)
                 unless kill(9, $pid) || $!{ESRCH};
@@ -102,7 +128,6 @@ sub terminate {
 
         if ($block) {
             waitpid($pid, 0);
-
         } else {
             while ($pid > 0) {
                 $pid = waitpid($pid, WNOHANG);
@@ -117,6 +142,8 @@ sub terminate {
     undef $self->{from_child};
     undef $self->{child_err};
     undef $self->{child_err_mon};
+    undef $self->{inbox};
+    undef $self->{inbox_mon};
 
     return 1;
 }
@@ -132,7 +159,7 @@ sub send {
 sub recv {
     my $self = shift;
     croak 'not running' unless $self->is_running;
-    my $line = $self->{from_child}->readline($EOL);
+    my $line = $self->{inbox}->get or croak 'shutdown';
     my $data = decode($line);
 
     ++$self->{processed};
