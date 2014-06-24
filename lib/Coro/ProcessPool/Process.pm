@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Carp;
 
-use Coro qw(async);
+use Coro qw(async cede);
 use Coro::Handle qw(unblock);
 use Coro::AnyEvent qw();
 use Config;
@@ -12,6 +12,7 @@ use IPC::Open3 qw(open3);
 use POSIX qw(:sys_wait_h);
 use String::Escape qw(backslash);
 use Symbol qw(gensym);
+use Coro::ProcessPool::Mailbox;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
 
 if ($^O eq 'MSWin32') {
@@ -20,13 +21,10 @@ if ($^O eq 'MSWin32') {
 
 use fields qw(
     pid
-    to_child
-    from_child
     child_err
     child_err_mon
     processed
-    inbox
-    inbox_mon
+    mailbox
 );
 
 sub DESTROY {
@@ -76,24 +74,14 @@ sub spawn {
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 
     $self->{pid}        = $pid;
-    $self->{to_child}   = unblock $w;
-    $self->{from_child} = unblock $r;
     $self->{child_err}  = unblock $e;
     $self->{processed}  = 0;
-    $self->{inbox}      = Coro::Channel->new();
+    $self->{mailbox}    = Coro::ProcessPool::Mailbox->new($r, $w);
 
     $self->{child_err_mon} = async {
         while (my $line = $self->{child_err}->readline) {
             warn "(WORKER) $line";
         }
-    };
-
-    $self->{inbox_mon} = async {
-        while (my $line = $self->{from_child}->readline($EOL)) {
-            $self->{inbox}->put($line);
-        }
-
-        $self->{inbox}->shutdown;
     };
 
     return $pid;
@@ -111,12 +99,7 @@ sub terminate {
     my $pid = $self->{pid};
 
     if ($self->is_running) {
-        $self->{from_child}->close;
-        $self->{to_child}->close;
         $self->{child_err}->close;
-
-        $self->{inbox_mon}->safe_cancel;
-        $self->{inbox_mon}->join;
 
         $self->{child_err_mon}->safe_cancel;
         $self->{child_err_mon}->join;
@@ -138,12 +121,8 @@ sub terminate {
     }
 
     undef $self->{pid};
-    undef $self->{to_child};
-    undef $self->{from_child};
     undef $self->{child_err};
     undef $self->{child_err_mon};
-    undef $self->{inbox};
-    undef $self->{inbox_mon};
 
     return 1;
 }
@@ -152,16 +131,13 @@ sub send {
     my ($self, $f, $args) = @_;
     croak 'not running' unless $self->is_running;
     $args ||= [];
-    my $line = encode([$f, $args]);
-    $self->{to_child}->print($line . $EOL);
+    return $self->{mailbox}->send([$f, $args]);
 }
 
 sub recv {
-    my $self = shift;
+    my ($self, $msgid) = @_;
     croak 'not running' unless $self->is_running;
-    my $line = $self->{inbox}->get or croak 'shutdown';
-    my $data = decode($line);
-
+    my $data = $self->{mailbox}->recv($msgid);
     ++$self->{processed};
 
     if ($data->[0]) {
@@ -174,7 +150,7 @@ sub recv {
 sub readable {
     my $self = shift;
     croak 'not running' unless $self->is_running;
-    $self->{from_child}->readable;
+    $self->{mailbox}->readable;
 }
 
 1;

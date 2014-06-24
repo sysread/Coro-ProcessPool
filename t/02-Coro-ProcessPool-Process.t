@@ -17,8 +17,8 @@ SKIP: {
     ok($proc->spawn, 'spawn');
 
     foreach my $i (1 .. 10) {
-        ok($proc->send(sub { $_[0] * 2 }, [$i]), "send ($i)");
-        ok(my $reply = $proc->recv, "recv ($i)");
+        ok(my $id = $proc->send(sub { $_[0] * 2 }, [$i]), "send ($i)");
+        ok(my $reply = $proc->recv($id), "recv ($i)");
         is($reply, $i * 2, "receives expected result ($i)");
     }
 

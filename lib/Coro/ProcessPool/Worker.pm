@@ -43,10 +43,11 @@ sub start {
 
     my $proc_worker = async {
         while (1) {
-            my $line  = $inbox->get or last;
-            my $data  = decode($line);
-            my $reply = $class->process_task($data);
-            $outbox->put(encode($reply));
+            my $line = $inbox->get or last;
+            my $data = decode($line);
+            my ($id, $task) = @$data;
+            my $reply = $class->process_task($task);
+            $outbox->put(encode([$id, $reply]));
         }
     };
 

@@ -123,14 +123,14 @@ sub process {
     }
 
     # Send the task
-    $proc->send($f, $args);
+    my $msgid = $proc->send($f, $args);
 
     # Replace process in the pool as soon as result is ready on the connection
     $proc->readable;
     $self->{procs}->put($proc);
 
     # Collect and return the result
-    return $proc->recv;
+    return $proc->recv($msgid);
 }
 
 sub map {
