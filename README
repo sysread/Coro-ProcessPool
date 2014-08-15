@@ -114,7 +114,7 @@ A NOTE ABOUT IMPORTS AND CLOSURES
     The correct way to do this is to import from within the function:
 
         my $result = $pool->process(sub {
-            use Foo;
+            require Foo;
             my $foo = Foo->new();
             return $foo->bar;
         });
@@ -125,6 +125,45 @@ A NOTE ABOUT IMPORTS AND CLOSURES
         my $foo = Foo->new();
 
         my $result = $pool->process(sub { $_[0]->bar }, [ $foo ]);
+
+  Use versus require
+    The "use" pragma is run a compile time, whereas "require" is evaluated
+    at runtime. Because of this, the use of "use" in code passed directly to
+    the "process" method can fail because the "use" statement has already
+    been evaluated when the calling code was compiled.
+
+    This will not work:
+
+        $pool->process(sub {
+            use Foo;
+            my $foo = Foo->new();
+        });
+
+    This will work:
+
+        $pool->process(sub {
+            require Foo;
+            my $foo = Foo->new();
+        });
+
+    If "use" is necessary (for example, to import a method or transform the
+    calling code via import), it is recommended to move the code into its
+    own module, which can then be called in the anonymous routine:
+
+        package Bar;
+
+        use Foo;
+
+        sub dostuff {
+            ...
+        }
+
+    Then, in your caller:
+
+        $pool->process(sub {
+            require Bar;
+            Bar::dostuff();
+        });
 
 COMPATIBILITY
     "Coro::ProcessPool" will likely break on Win32 due to missing support
