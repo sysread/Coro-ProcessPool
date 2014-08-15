@@ -46,7 +46,8 @@ sub DESTROY {
     $self->{in}->close if $self->{in};
     $self->{out}->close if $self->{out};
     $self->{inbox_mon}->safe_cancel
-        if $self->{inbox_running};
+        if $self->{inbox_running}
+        && $self->{inbox_mon};
 }
 
 sub send {
