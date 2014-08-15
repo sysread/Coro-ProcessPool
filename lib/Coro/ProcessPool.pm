@@ -13,7 +13,7 @@ use Coro;
 use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
 
-our $VERSION = 0.09;
+our $VERSION = 0.10;
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -302,7 +302,7 @@ Nor will this:
 The correct way to do this is to import from within the function:
 
     my $result = $pool->process(sub {
-        use Foo;
+        require Foo;
         my $foo = Foo->new();
         return $foo->bar;
     });
@@ -313,6 +313,46 @@ The correct way to do this is to import from within the function:
     my $foo = Foo->new();
 
     my $result = $pool->process(sub { $_[0]->bar }, [ $foo ]);
+
+=head2 Use versus require
+
+The C<use> pragma is run a compile time, whereas C<require> is evaluated at
+runtime. Because of this, the use of C<use> in code passed directly to the
+C<process> method can fail because the C<use> statement has already been
+evaluated when the calling code was compiled.
+
+This will not work:
+
+    $pool->process(sub {
+        use Foo;
+        my $foo = Foo->new();
+    });
+
+This will work:
+
+    $pool->process(sub {
+        require Foo;
+        my $foo = Foo->new();
+    });
+
+If C<use> is necessary (for example, to import a method or transform the
+calling code via import), it is recommended to move the code into its own
+module, which can then be called in the anonymous routine:
+
+    package Bar;
+
+    use Foo;
+
+    sub dostuff {
+        ...
+    }
+
+Then, in your caller:
+
+    $pool->process(sub {
+        require Bar;
+        Bar::dostuff();
+    });
 
 =head1 COMPATIBILITY
 
