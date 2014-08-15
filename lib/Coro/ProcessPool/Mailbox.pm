@@ -14,7 +14,7 @@ use fields qw(
     out
     inbox
     inbox_mon
-    outbox_mon
+    inbox_running
 );
 
 sub new {
@@ -26,6 +26,7 @@ sub new {
     $self->{out}     = unblock $fh_out;
     $self->{inbox}   = {};
 
+    $self->{inbox_running} = 1;
     $self->{inbox_mon} = async {
         while (my $line = $self->{in}->readline($EOL)) {
             last unless $line;
@@ -33,6 +34,8 @@ sub new {
             my ($id, $data) = @$msg;
             $self->{inbox}{$id}->put($data);
         }
+
+        $self->{inbox_running} = 0;
     };
 
     return $self;
@@ -40,9 +43,10 @@ sub new {
 
 sub DESTROY {
     my $self = shift;
-    $self->{inbox_mon}->safe_cancel if $self->{inbox_mon};
     $self->{in}->close if $self->{in};
     $self->{out}->close if $self->{out};
+    $self->{inbox_mon}->safe_cancel
+        if $self->{inbox_running};
 }
 
 sub send {

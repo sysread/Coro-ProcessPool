@@ -1,5 +1,6 @@
 0.10    2014-08-15
     * Updated documentation to clarify use of use vs require pragma
+    * Fixed unchecked safe_cancel in mailbox cleanup
 
 0.09    2014-01-24
     * Fixed bug when Sys::Info fails on some platforms
