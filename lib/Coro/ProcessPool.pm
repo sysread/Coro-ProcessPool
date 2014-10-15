@@ -13,7 +13,7 @@ use Coro;
 use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
 
-our $VERSION = 0.10;
+our $VERSION = 0.11;
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -31,7 +31,6 @@ use fields qw(
 sub new {
     my ($class, %param) = @_;
     my $self = fields::new($class);
-
     $self->{max_procs} = $param{max_procs} || $CPU_COUNT;
     $self->{max_reqs}  = $param{max_reqs}  || 0;
     $self->{num_procs} = 0;
@@ -135,19 +134,8 @@ sub process {
 
 sub map {
     my ($self, $f, @args) = @_;
-
-    my @results;
-    my @threads;
-
-    foreach my $i (0 .. $#args) {
-        push @threads, async {
-            $results[$i] = [ process(@_) ];
-        } $self, $f, [$args[$i]];
-    }
-
-    $_->join foreach @threads;
-
-    return map { @$_ } @results;
+    my @deferred = map { $self->defer($f, [$_]) } @args;
+    return map { $_->() } @deferred;
 }
 
 sub defer {
@@ -156,6 +144,8 @@ sub defer {
     my $cv  = AnyEvent->condvar;
 
     async_pool {
+        my $arr = shift;
+
         if ($arr) {
             my @results = eval { process(@_) };
             $cv->croak($@) if $@;
@@ -165,7 +155,7 @@ sub defer {
             $cv->croak($@) if $@;
             $cv->send($result);
         }
-    } $self, $f, $args;
+    } $arr, $self, $f, $args;
 
     return sub { $cv->recv };
 }

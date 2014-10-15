@@ -65,7 +65,7 @@ sub get_args {
 # on failure.
 #-------------------------------------------------------------------------------
 sub spawn {
-    my ($self) = @_;
+    my $self = shift;
     my ($r, $w, $e) = (gensym, gensym, gensym);
 
     my $cmd  = $self->get_command_path;

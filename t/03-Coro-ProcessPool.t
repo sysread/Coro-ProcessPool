@@ -17,12 +17,7 @@ SKIP: {
 
     use_ok($class) or BAIL_OUT;
 
-    my %args = (
-        max_reqs => 5,
-        ($class->_cpu_count ? (max_procs => 1) : ()),
-    );
-
-    my $pool = new_ok($class, [ %args ]) or BAIL_OUT 'Failed to create class';
+    my $pool = new_ok($class, [max_reqs => 5]) or BAIL_OUT 'Failed to create class';
     ok($pool->{max_procs} > 0, "max procs set automatically ($pool->{max_procs})");
 
     my $doubler = sub { $_[0] * 2 };
@@ -90,7 +85,7 @@ SKIP: {
         my @numbers  = 1 .. 100;
         my @actual   = $pool->map($doubler, @numbers);
         my @expected = map { $_ * 2 } @numbers;
-        is_deeply(\@actual, \@expected);
+        is_deeply(\@actual, \@expected, 'expected result');
     };
 
     subtest 'defer' => sub {
