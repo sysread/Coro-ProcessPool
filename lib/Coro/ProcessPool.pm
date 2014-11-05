@@ -11,7 +11,7 @@ use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Sys::Info;
 
-our $VERSION = '0.12_01';
+our $VERSION = '0.12_02';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';

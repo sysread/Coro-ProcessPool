@@ -4,8 +4,8 @@ use strict;
 use warnings;
 use Carp;
 use Const::Fast;
-use Storable       qw(freeze thaw);
-#use Coro::Storable qw(freeze thaw);
+use Storable;
+use Coro::Storable qw(nfreeze thaw);
 use MIME::Base64   qw(encode_base64 decode_base64);
 
 use base qw(Exporter);
@@ -16,7 +16,7 @@ const our $EOL => "\n";
 sub encode {
     local $Storable::Deparse = 1;
     my $ref  = shift or croak 'encode: expected reference';
-    my $data = freeze($ref);
+    my $data = nfreeze($ref);
     return encode_base64($data, '');
 }
 

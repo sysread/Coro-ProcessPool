@@ -21,6 +21,7 @@ WriteMakefile(
         'Sys::Info'        => 0,
         'Guard'            => 0,
         'Test::TinyMocker' => 0,
+        'Storable'         => '2.05',
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,
