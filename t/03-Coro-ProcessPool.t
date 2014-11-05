@@ -81,12 +81,7 @@ SKIP: {
         }
     };
 
-    subtest 'map' => sub {
-        my @numbers  = 1 .. 100;
-        my @actual   = $pool->map($doubler, @numbers);
-        my @expected = map { $_ * 2 } @numbers;
-        is_deeply(\@actual, \@expected, 'expected result');
-    };
+    ok(1, 'test');
 
     subtest 'defer' => sub {
         my $count = 20;
@@ -99,6 +94,13 @@ SKIP: {
         foreach my $i (1 .. $count) {
             is($result{$i}->(), $i * 2, 'expected result');
         }
+    };
+
+    subtest 'map' => sub {
+        my @numbers  = 1 .. 100;
+        my @expected = map { $_ * 2 } @numbers;
+        my @actual   = $pool->map($doubler, @numbers);
+        is_deeply(\@actual, \@expected, 'expected result');
     };
 
     $pool->shutdown;

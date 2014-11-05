@@ -4,7 +4,8 @@ use strict;
 use warnings;
 use Carp;
 use Const::Fast;
-use Coro::Storable qw(freeze thaw);
+use Storable       qw(freeze thaw);
+#use Coro::Storable qw(freeze thaw);
 use MIME::Base64   qw(encode_base64 decode_base64);
 
 use base qw(Exporter);
