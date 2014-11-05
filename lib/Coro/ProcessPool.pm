@@ -5,12 +5,10 @@ use warnings;
 use Carp;
 
 use AnyEvent;
+use Coro;
 use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
 use Coro::ProcessPool::Process;
-use Coro::Storable qw(freeze thaw);
-use Coro;
-use MIME::Base64 qw(encode_base64 decode_base64);
 use Sys::Info;
 
 our $VERSION = '0.12_01';
