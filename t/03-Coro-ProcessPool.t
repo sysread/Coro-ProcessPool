@@ -7,6 +7,7 @@ use Test::More;
 use Guard;
 use Test::TinyMocker;
 use Coro::Channel;
+use Coro::ProcessPool::Util qw(cpu_count);
 
 BEGIN { use AnyEvent::Impl::Perl }
 
@@ -17,8 +18,9 @@ SKIP: {
 
     use_ok($class) or BAIL_OUT;
 
+    my $cpus = cpu_count();
     my $pool = new_ok($class, [max_reqs => 5]) or BAIL_OUT 'Failed to create class';
-    ok($pool->{max_procs} > 0, "max procs set automatically ($pool->{max_procs})");
+    is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
 
     my $doubler = sub { $_[0] * 2 };
 
