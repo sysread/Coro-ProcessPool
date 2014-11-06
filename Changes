@@ -1,4 +1,4 @@
-0.14    ????-??-??
+0.14    2014-11-06
     * Better support for Perl 5.8.9
     * Removed dependency on Sys::Info (unsupported on too many platforms and perl versions)
 
