@@ -4,41 +4,37 @@ use strict;
 use warnings;
 use Carp;
 
-use Coro qw(async cede);
-use Coro::Handle qw(unblock);
-use Coro::AnyEvent qw();
 use Config;
-use IPC::Open3 qw(open3);
-use POSIX qw(:sys_wait_h);
-use String::Escape qw(backslash);
-use Symbol qw(gensym);
-use Coro::ProcessPool::Mailbox;
-use Coro::ProcessPool::Util qw(encode decode $EOL);
+use Coro                        qw(async cede);
+use Coro::AnyEvent              qw();
+use Coro::Handle                qw(unblock);
+use Coro::ProcessPool::Mailbox  qw();
+use Coro::ProcessPool::Util     qw(encode decode $EOL);
+use IPC::Open3                  qw(open3);
+use POSIX                       qw(:sys_wait_h);
+use String::Escape              qw(backslash);
+use Symbol                      qw(gensym);
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
 
-use fields qw(
-    pid
-    child_err
-    child_err_mon
-    processed
-    mailbox
-);
+sub new {
+    my ($class, %param) = @_;
+    return bless {
+        processed     => 0,
+        pid           => undef,
+        child_err     => undef,
+        child_err_mon => undef,
+        mailbox       => undef,
+    }, $class;
+}
 
 sub DESTROY {
     if ($_[0] && $_[0]->{pid}) {
         $_[0]->terminate(1);
         $_[0]->cleanup;
     }
-}
-
-sub new {
-    my ($class, %param) = @_;
-    my $self = fields::new($class);
-    $self->{processed} = 0;
-    return $self;
 }
 
 #-------------------------------------------------------------------------------

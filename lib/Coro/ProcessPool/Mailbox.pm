@@ -9,27 +9,18 @@ use Coro::Handle qw(unblock);
 use Coro::Semaphore;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
 
-use fields qw(
-    counter
-    in
-    out
-    inbox
-    inbox_mon
-    inbox_running
-    read_sem
-);
-
 sub new {
     my ($class, $fh_in, $fh_out) = @_;
-    my $self = fields::new($class);
 
-    $self->{counter}  = 0;
-    $self->{in}       = unblock $fh_in;
-    $self->{out}      = unblock $fh_out;
-    $self->{inbox}    = {};
-    $self->{read_sem} = Coro::Semaphore->new(0);
+    my $self = bless {
+        counter       => 0,
+        in            => unblock $fh_in,
+        out           => unblock $fh_out,
+        inbox         => {},
+        read_sem      => Coro::Semaphore->new(0),
+        inbox_running => 1,
+    }, $class;
 
-    $self->{inbox_running} = 1;
     $self->{inbox_mon} = async {
         while (1) {
             $self->{in}->readable or last;

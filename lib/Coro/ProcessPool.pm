@@ -19,21 +19,14 @@ if ($^O eq 'MSWin32') {
 
 our $CPU_COUNT = _cpu_count();
 
-use fields qw(
-    max_procs
-    num_procs
-    max_reqs
-    procs
-);
-
 sub new {
     my ($class, %param) = @_;
-    my $self = fields::new($class);
-    $self->{max_procs} = $param{max_procs} || $CPU_COUNT;
-    $self->{max_reqs}  = $param{max_reqs}  || 0;
-    $self->{num_procs} = 0;
-    $self->{procs}     = Coro::Channel->new();
-    return $self;
+    return bless {
+        max_procs => $param{max_procs} || $CPU_COUNT,
+        max_reqs  => $param{max_reqs}  || 0,
+        num_procs => 0,
+        procs     => Coro::Channel->new(),
+    }, $class;
 }
 
 sub _cpu_count {

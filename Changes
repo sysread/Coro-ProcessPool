@@ -1,6 +1,7 @@
 0.13    ????-??-??
     * Boosted Storable minimum version to 2.05 (when CODE refs were added)
     * Added test to verify CODE refs usable with encode/decode routines
+    * Removed use of fields pragma
 
 0.12    2014-10-31
     * Messages now stringified using Coro::Storable
