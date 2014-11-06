@@ -18,7 +18,6 @@ WriteMakefile(
         'Const::Fast'      => 0,
         'Coro'             => 0,
         'String::Escape'   => 0,
-        'Sys::Info'        => 0,
         'Guard'            => 0,
         'Test::TinyMocker' => 0,
         'Storable'         => '2.05',

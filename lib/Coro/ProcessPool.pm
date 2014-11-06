@@ -9,30 +9,22 @@ use Coro;
 use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
 use Coro::ProcessPool::Process;
-use Sys::Info;
+use Coro::ProcessPool::Util qw(cpu_count);
 
-our $VERSION = '0.13';
+our $VERSION = '0.13_01';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
 
-our $CPU_COUNT = _cpu_count();
-
 sub new {
     my ($class, %param) = @_;
     return bless {
-        max_procs => $param{max_procs} || $CPU_COUNT,
+        max_procs => $param{max_procs} || cpu_count,
         max_reqs  => $param{max_reqs}  || 0,
         num_procs => 0,
         procs     => Coro::Channel->new(),
     }, $class;
-}
-
-sub _cpu_count {
-    my $info = Sys::Info->new();
-    my $cpu  = $info->device('CPU');
-    return $cpu->count || 4; # default to 4 if Sys::Info fails
 }
 
 sub shutdown {

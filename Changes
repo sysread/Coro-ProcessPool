@@ -1,3 +1,6 @@
+0.14    ????-??-??
+    * Removed dependency on Sys::Info (unsupported on too many platforms and perl versions)
+
 0.13    2014-11-06
     * Boosted Storable minimum version to 2.05 (when CODE refs were added)
     * Added test to verify CODE refs usable with encode/decode routines
