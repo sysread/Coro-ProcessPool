@@ -8,6 +8,7 @@ use Coro::AnyEvent;
 use Coro::Channel;
 use Coro::Handle;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
+use Devel::StackTrace;
 use Guard qw(scope_guard);
 
 if ($^O eq 'MSWin32') {
@@ -68,7 +69,18 @@ sub process_task {
     my ($class, $task) = @_;
     my ($f, $args) = @$task;
     my $result = eval { $f->(@$args) };
-    return $@ ? [1, $@] : [0, $result];
+
+    if ($@) {
+        my $error = $@;
+        my $trace = Devel::StackTrace->new(
+            message      => $error,
+            indent       => 1,
+            ignore_class => [$class, 'Coro', 'AnyEvent'],
+        );
+        return [1, $trace->as_string];
+    }
+
+    return [0, $result];
 }
 
 1;

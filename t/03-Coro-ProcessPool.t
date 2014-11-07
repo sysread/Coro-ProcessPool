@@ -105,6 +105,18 @@ SKIP: {
         is_deeply(\@actual, \@expected, 'expected result');
     };
 
+    subtest 'fail' => sub {
+        my $croaker = sub {
+            my ($x) = @_;
+            return $x / 0;
+        };
+
+        my $result = eval { $pool->process($croaker, [1]) };
+        my $error  = $@;
+
+        ok($error, 'processing failure croaks');
+    };
+
     $pool->shutdown;
 };
 
