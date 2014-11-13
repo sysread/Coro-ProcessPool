@@ -216,11 +216,11 @@ packages used by client code.
 
 Processes code ref C<$f> in a child process from the pool. If C<$args> is
 provided, it is an array ref of arguments that will be passed to C<$f>. Returns
-the result of calling C<$f->(@$args)>.
+the result of calling $f->(@$args).
 
 Alternately, C<$f> may be the name of a class implementing the methods C<new>
 and C<run>, in which case the result is equivalent to calling
-C<$f->new(@$args)->run()>. Note that the include path for worker processes is
+$f->new(@$args)->run(). Note that the include path for worker processes is
 identical to that of the calling process.
 
 This call will yield until the results become available. If all processes are
