@@ -1,5 +1,6 @@
 0.15    ????-??-??
     * Processing errors now include better information
+    * Tasks may now be submitted with the name of a class implementing new(@args) and run()
 
 0.14    2014-11-06
     * Better support for Perl 5.8.9
