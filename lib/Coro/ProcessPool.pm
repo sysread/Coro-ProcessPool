@@ -178,6 +178,9 @@ Coro::ProcessPool - an asynchronous process pool
         print "$i = " . $deferred{$i}->() . "\n";
     }
 
+    # Use a "task class", implementing 'new' and 'run'
+    my $result = $pool->process('Task::Doubler', 21);
+
     $pool->shutdown;
 
 =head1 DESCRIPTION
@@ -214,6 +217,11 @@ packages used by client code.
 Processes code ref C<$f> in a child process from the pool. If C<$args> is
 provided, it is an array ref of arguments that will be passed to C<$f>. Returns
 the result of calling C<$f->(@$args)>.
+
+Alternately, C<$f> may be the name of a class implementing the methods C<new>
+and C<run>, in which case the result is equivalent to calling
+C<$f->new(@$args)->run()>. Note that the include path for worker processes is
+identical to that of the calling process.
 
 This call will yield until the results become available. If all processes are
 busy, this method will block until one becomes available. Processes are spawned
@@ -326,6 +334,12 @@ Then, in your caller:
         require Bar;
         Bar::dostuff();
     });
+
+=head2 If it's a problem...
+
+Use the task class method if the loading requirements are causing headaches:
+
+    my $result = $pool->process('Task::Class', [@args]);
 
 =head1 COMPATIBILITY
 
