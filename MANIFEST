@@ -13,3 +13,4 @@ t/00-Coro-ProcessPool-Util.t
 t/01-Coro-ProcessPool-Worker.t
 t/02-Coro-ProcessPool-Process.t
 t/03-Coro-ProcessPool.t
+t/TestTask.pm

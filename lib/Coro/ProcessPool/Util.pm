@@ -15,7 +15,8 @@ const our $EOL => "\n";
 
 sub encode {
     no warnings 'once';
-    local $Storable::Deparse = 1;
+    local $Storable::Deparse    = 1;
+    local $Storable::forgive_me = 1;
     my $ref  = shift or croak 'encode: expected reference';
     my $data = nfreeze($ref);
     return encode_base64($data, '');

@@ -22,6 +22,7 @@ WriteMakefile(
         'Test::TinyMocker'  => 0,
         'Storable'          => '2.05',
         'Devel::StackTrace' => 0,
+        'Module::Load'      => 0,
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,

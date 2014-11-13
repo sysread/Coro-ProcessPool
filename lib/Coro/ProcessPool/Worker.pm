@@ -10,6 +10,7 @@ use Coro::Handle;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
 use Devel::StackTrace;
 use Guard qw(scope_guard);
+use Module::Load qw(load);
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -68,7 +69,18 @@ sub start {
 sub process_task {
     my ($class, $task) = @_;
     my ($f, $args) = @$task;
-    my $result = eval { $f->(@$args) };
+
+    my $result = eval {
+        if (ref $f && ref $f eq 'CODE') {
+            $f->(@$args);
+        } else {
+            load $f;
+            die "method new() not found for class $f" unless $f->can('run');
+            die "method run() not found for class $f" unless $f->can('run');
+            my $obj = $f->new(@$args);
+            $obj->run;
+        }
+    };
 
     if ($@) {
         my $error = $@;

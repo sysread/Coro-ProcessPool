@@ -92,7 +92,7 @@ sub checkout_proc {
 
 sub process {
     my ($self, $f, $args, $timeout) = @_;
-    ref $f eq 'CODE' || croak 'expected CODE ref to execute';
+    defined $f || croak 'expected CODE ref or task class (string) to execute';
     $args ||= [];
     ref $args eq 'ARRAY' || croak 'expected ARRAY ref of arguments';
 
