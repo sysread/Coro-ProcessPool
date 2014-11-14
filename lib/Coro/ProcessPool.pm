@@ -11,7 +11,7 @@ use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util qw(cpu_count);
 
-our $VERSION = '0.14_01';
+our $VERSION = '0.15';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
