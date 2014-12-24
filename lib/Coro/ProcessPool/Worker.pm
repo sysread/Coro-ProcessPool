@@ -75,7 +75,7 @@ sub process_task {
             $f->(@$args);
         } else {
             load $f;
-            die "method new() not found for class $f" unless $f->can('run');
+            die "method new() not found for class $f" unless $f->can('new');
             die "method run() not found for class $f" unless $f->can('run');
             my $obj = $f->new(@$args);
             $obj->run;
