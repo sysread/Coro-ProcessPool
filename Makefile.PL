@@ -16,6 +16,7 @@ WriteMakefile(
     clean               => { FILES => 'Coro-ProcessPool-*' },
     PREREQ_PM => {
         'Const::Fast'       => 0,
+        'AnyEvent'          => 0,
         'Coro'              => 0,
         'String::Escape'    => 0,
         'Guard'             => 0,

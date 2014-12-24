@@ -1,3 +1,6 @@
+0.16    2014-12-24
+    * Added AnyEvent as a dependency to catch obscure error on Linux/ARM systems
+
 0.15    2014-11-14
     * Processing errors now include better information
     * Tasks may now be submitted with the name of a class implementing new(@args) and run()
