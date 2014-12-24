@@ -83,8 +83,6 @@ SKIP: {
         }
     };
 
-    ok(1, 'test');
-
     subtest 'defer' => sub {
         my $count = 20;
         my %result;
