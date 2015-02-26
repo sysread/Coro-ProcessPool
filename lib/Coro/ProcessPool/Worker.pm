@@ -20,6 +20,10 @@ my $TIMEOUT = 0.2;
 my $IN  = unblock *STDIN;
 my $OUT = unblock *STDOUT;
 
+$SIG{KILL} = sub {
+  exit 0;
+};
+
 sub start {
     my $class   = shift;
     my $inbox   = Coro::Channel->new();

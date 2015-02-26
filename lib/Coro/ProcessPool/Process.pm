@@ -95,6 +95,8 @@ sub terminate {
     my $pid = $self->{pid};
 
     if ($self->is_running) {
+        $self->send(sub { exit(0) });
+
         $self->{child_err}->close;
 
         $self->{child_err_mon}->safe_cancel;
