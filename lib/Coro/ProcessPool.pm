@@ -32,7 +32,7 @@ sub shutdown {
     my $self = shift;
     for (1 .. $self->{num_procs}) {
         my $proc = $self->{procs}->get;
-        $proc->terminate if defined $proc;
+        $proc->terminate;
         --$self->{num_procs};
     }
 }
@@ -145,8 +145,6 @@ sub queue {
         }
     } @_;
 }
-
-sub DESTROY { $_[0]->shutdown }
 
 1;
 __END__
