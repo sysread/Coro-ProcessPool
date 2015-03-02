@@ -51,9 +51,28 @@ sub start {
 
     $IN_WORKER = async {
         while ($RUNNING) {
-            Coro::AnyEvent::readable $IN->fh, $TIMEOUT or next;
-            my $line = $IN->readline($EOL) or last;
-            $INBOX->put($line);
+            my $line = $IN->readline($EOL);
+
+            if ($line) {
+                $INBOX->put($line);
+            }
+            # Connection to parent broken; shut down inbox and wait for the
+            # remaining workers to complete.
+            else {
+                $RUNNING = 0;
+                $INBOX->shutdown;
+
+                if ($PROC_WORKER) {
+                    $PROC_WORKER->join;
+                    $OUTBOX->shutdown;
+                }
+
+                if ($OUT_WORKER) {
+                    $OUT_WORKER->join;
+                }
+
+                last;
+            }
         }
     };
 

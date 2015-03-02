@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use List::Util qw(shuffle);
+use AnyEvent;
 use Coro;
 use Coro::AnyEvent;
 use Test::More;
@@ -113,6 +114,33 @@ SKIP: {
         my $error  = $@;
 
         ok($error, 'processing failure croaks');
+    };
+
+    subtest 'queue' => sub {
+        my $count = 100;
+        my $done  = AnyEvent->condvar;
+        my %result;
+
+        my $make_k = sub {
+            my $n = shift;
+            return sub {
+                $result{$n} = shift;
+                if (scalar(keys %result) == $count) {
+                    $done->send;
+                }
+            };
+        };
+
+        foreach my $i (shuffle 1 .. $count) {
+            my $k = $make_k->($i);
+            $pool->queue($doubler, [$i], $k);
+        }
+
+        $done->recv;
+
+        foreach my $i (1 .. $count) {
+            is($result{$i}, $i * 2, 'expected result');
+        }
     };
 
     $pool->shutdown;

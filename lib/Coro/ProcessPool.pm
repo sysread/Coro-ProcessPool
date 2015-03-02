@@ -24,6 +24,7 @@ sub new {
         max_reqs  => $param{max_reqs}  || 0,
         num_procs => 0,
         procs     => Coro::Channel->new(),
+        queue     => Coro::Channel->new(),
     }, $class;
 }
 
@@ -31,7 +32,7 @@ sub shutdown {
     my $self = shift;
     for (1 .. $self->{num_procs}) {
         my $proc = $self->{procs}->get;
-        $proc->terminate;
+        $proc->terminate if defined $proc;
         --$self->{num_procs};
     }
 }
@@ -100,7 +101,7 @@ sub process {
 
     # Replace process in the pool as soon as result is ready on the connection
     $proc->readable;
-    $self->{procs}->put($proc);
+    $self->checkin_proc($proc);
 
     # Collect and return the result
     return $proc->recv($msgid);
@@ -132,6 +133,17 @@ sub defer {
     } $arr, $self, $f, $args;
 
     return sub { $cv->recv };
+}
+
+sub queue {
+    my $self = shift;
+    async_pool {
+        my ($f, $args, $k) = @_;
+        my $result = $self->process($f, $args);
+        if (ref $k && ref $k eq 'CODE') {
+            $k->($result);
+        }
+    } @_;
 }
 
 sub DESTROY { $_[0]->shutdown }
@@ -241,6 +253,30 @@ reference that, when called, returns the results of calling C<$f->(@$args)>.
 
     my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
     my $result   = $deferred->();
+
+=head2 queue($f, $args, $callback)
+
+Queues the execution of C<$f->(@$args)> and returns immediately. If
+C<$callback> is specified and is a code ref, it will be called with the result
+of the executed code once the task is processed. Note that the callback is not
+provided with any identifying information about the task being executed. That
+is the responsibility of the caller. It is also the caller's responsibility to
+coordinate any code that depends on the result, for example using a condition
+variable.
+
+    my $cv = AnyEvent->condvar;
+
+    sub make_callback {
+        my $n = shift;
+        return sub {
+            my $result = shift;
+            print "2 * $n = $result\n";
+            $cv->send;
+        }
+    }
+
+    $pool->queue($doubler_function, [21], make_callback(21));
+    $cv->recv;
 
 =head2 shutdown
 

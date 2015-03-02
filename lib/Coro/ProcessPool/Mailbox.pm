@@ -63,10 +63,10 @@ sub is_running {
 
 sub shutdown {
     my $self = shift;
-    return $self->_send('SHUTDOWN');
+    return $self->write('SHUTDOWN');
 }
 
-sub _send {
+sub write {
     my ($self, $data) = @_;
     my $id = ++$self->{counter};
     $self->{out}->print(encode([$id, $data]). $EOL);
@@ -75,7 +75,7 @@ sub _send {
 
 sub send {
     my ($self, $data) = @_;
-    my $id = $self->_send($data);
+    my $id = $self->write($data);
     $self->{inbox}{$id} = Coro::Channel->new;
     return $id;
 }
