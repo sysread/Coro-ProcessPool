@@ -1,5 +1,7 @@
 0.17    2015-02-26
     * More robust method for killing child processes
+    * Saner pool shutdown
+    * Added queue() method
 
 0.16    2014-12-24
     * Added AnyEvent as a dependency to catch obscure error on Linux/ARM systems
