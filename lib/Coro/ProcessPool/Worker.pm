@@ -16,56 +16,67 @@ if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
 
+my $RUNNING = 1;
 my $TIMEOUT = 0.2;
-my $IN  = unblock *STDIN;
-my $OUT = unblock *STDOUT;
+my $IN      = unblock *STDIN;
+my $OUT     = unblock *STDOUT;
+my $OUTBOX  = Coro::Channel->new();
+my $INBOX   = Coro::Channel->new();
+my ($IN_WORKER, $OUT_WORKER, $PROC_WORKER);
 
-$SIG{KILL} = sub {
-  exit 0;
-};
+$SIG{KILL} = sub { stop() };
+
+sub stop {
+    $RUNNING = 0;
+
+    if ($IN_WORKER) {
+        $IN_WORKER->safe_cancel;
+        $INBOX->shutdown;
+    }
+
+    if ($PROC_WORKER) {
+        $PROC_WORKER->join;
+        $OUTBOX->shutdown;
+    }
+
+    if ($OUT_WORKER) {
+        $OUT_WORKER->join;
+    }
+
+    exit 0;
+}
 
 sub start {
-    my $class   = shift;
-    my $inbox   = Coro::Channel->new();
-    my $outbox  = Coro::Channel->new();
-    my $running = 1;
+    my $class = shift;
 
-    my $in_worker = async {
-        while (1) {
+    $IN_WORKER = async {
+        while ($RUNNING) {
             Coro::AnyEvent::readable $IN->fh, $TIMEOUT or next;
             my $line = $IN->readline($EOL) or last;
-            $inbox->put($line);
+            $INBOX->put($line);
         }
-
-        $running = 0;
     };
 
-    my $out_worker = async {
+    $OUT_WORKER = async {
         while (1) {
-            my $line = $outbox->get or last;
+            my $line = $OUTBOX->get or last;
             $OUT->print($line . $EOL);
         }
     };
 
-    my $proc_worker = async {
+    $PROC_WORKER = async {
         while (1) {
-            my $line = $inbox->get or last;
+            my $line = $INBOX->get or last;
             my $data = decode($line);
             my ($id, $task) = @$data;
             my $reply = $class->process_task($task);
-            $outbox->put(encode([$id, $reply]));
+            $OUTBOX->put(encode([$id, $reply]));
         }
     };
 
-    scope_guard {
-        $inbox->shutdown;
-        $in_worker->join;
+    scope_guard { stop };
 
-        $outbox->shutdown;
-        $out_worker->join;
-    };
-
-    while ($running) {
+    while ($RUNNING) {
         Coro::AnyEvent::sleep $TIMEOUT;
     }
 }
@@ -73,6 +84,11 @@ sub start {
 sub process_task {
     my ($class, $task) = @_;
     my ($f, $args) = @$task;
+
+    if (!ref($f) && $f eq 'SHUTDOWN') {
+      stop();
+      return;
+    }
 
     my $result = eval {
         if (ref $f && ref $f eq 'CODE') {

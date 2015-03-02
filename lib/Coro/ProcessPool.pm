@@ -66,22 +66,12 @@ sub checkout_proc {
     if (!defined $timeout) {
         return $self->{procs}->get;
     } else {
-        my $cv = AnyEvent->condvar;
-        my $proc;
+        my $cv           = AnyEvent->condvar;
+        my $thread_timer = async { Coro::AnyEvent::sleep($timeout), $cv->send(0) };
+        my $thread_proc  = async { $cv->send($self->{procs}->get) };
+        my $proc         = $cv->recv;
 
-        my $thread_timer = async {
-            Coro::AnyEvent::sleep $timeout;
-            $cv->send(0);
-        };
-
-        my $thread_proc = async {
-            $proc = $self->{procs}->get;
-            $cv->send(1);
-        };
-
-        my $result = $cv->recv;
-
-        if ($result) {
+        if ($proc) {
             $thread_timer->cancel;
             return $proc;
         } else {
@@ -99,6 +89,7 @@ sub process {
     my $proc = $self->checkout_proc($timeout);
 
     # Restart the process if the worker is exhausted
+    my $thread;
     if ($self->{max_reqs} > 0 && $proc->{processed} >= $self->{max_reqs}) {
         $self->kill_proc($proc);
         $proc = $self->start_proc;

@@ -56,11 +56,27 @@ sub DESTROY {
         && $self->{inbox_mon};
 }
 
-sub send {
+sub is_running {
+    my $self = shift;
+    return $self->{inbox_running};
+}
+
+sub shutdown {
+    my $self = shift;
+    return $self->_send('SHUTDOWN');
+}
+
+sub _send {
     my ($self, $data) = @_;
     my $id = ++$self->{counter};
-    $self->{inbox}{$id} = Coro::Channel->new;
     $self->{out}->print(encode([$id, $data]). $EOL);
+    return $id;
+}
+
+sub send {
+    my ($self, $data) = @_;
+    my $id = $self->_send($data);
+    $self->{inbox}{$id} = Coro::Channel->new;
     return $id;
 }
 
@@ -74,7 +90,6 @@ sub recv {
 sub readable {
     my $self = shift;
     $self->{read_sem}->down;
-    #$self->{in}->readable;
 }
 
 1;

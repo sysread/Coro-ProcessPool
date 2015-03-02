@@ -91,30 +91,19 @@ sub is_running {
 }
 
 sub terminate {
-    my ($self, $block) = @_;
-    my $pid = $self->{pid};
+    my $self = shift;
 
     if ($self->is_running) {
-        $self->send(sub { exit(0) });
-
+        my $pid = $self->{pid};
+        $self->{mailbox}->shutdown;
         $self->{child_err}->close;
-
         $self->{child_err_mon}->safe_cancel;
         $self->{child_err_mon}->join;
 
-        if (kill(0, $pid)) {
-            warn("Error killing pid %d: %s", $pid, $!)
-                unless kill(9, $pid) || $!{ESRCH};
-        }
-
-        if ($block) {
-            waitpid($pid, 0);
-        } else {
-            while ($pid > 0) {
-                $pid = waitpid($pid, WNOHANG);
-                Coro::AnyEvent::sleep(0.1)
-                    if $pid > 0;
-            }
+        while ($pid > 0) {
+            $pid = waitpid($pid, WNOHANG);
+            Coro::AnyEvent::sleep(0.1)
+                if $pid > 0;
         }
     }
 
@@ -134,7 +123,9 @@ sub send {
 
 sub recv {
     my ($self, $msgid) = @_;
-    croak 'not running' unless $self->is_running;
+    croak 'not running'
+        unless $self->is_running
+            or $self->{mailbox}->is_running;
     my $data = $self->{mailbox}->recv($msgid);
     ++$self->{processed};
 

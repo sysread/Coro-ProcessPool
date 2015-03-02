@@ -27,7 +27,10 @@ SKIP: {
         is($reply, $i * 2, "receives expected result ($i)");
     }
 
-    ok($proc->terminate, 'terminate');
+    ok(my $id = $proc->send(\&test_sub, [21]), 'final send');
+    ok($proc->terminate(1), 'terminate with pending task');
+    ok(my $reply = $proc->recv($id), 'reply received after termination');
+    is($reply, 42, 'received expected result');
 };
 
 done_testing;
