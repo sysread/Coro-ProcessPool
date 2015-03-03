@@ -55,7 +55,7 @@ SKIP: {
         }
 
         {
-            mock 'Coro::Channel', 'get', sub { Coro::AnyEvent::sleep 3 };
+            mock 'Coro::Channel', 'get', sub { Coro::AnyEvent::sleep 2 };
             scope_guard { unmock 'Coro::Channel', 'get' };
             eval { $pool->checkout_proc(1) };
             ok($@, 'error thrown after timeout');
