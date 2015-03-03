@@ -14,7 +14,6 @@ sub new {
     my ($class, $fh_in, $fh_out) = @_;
 
     my $self = bless {
-        counter       => 0,
         in            => unblock $fh_in,
         out           => unblock $fh_out,
         inbox         => {},
@@ -39,9 +38,11 @@ sub new {
             my $line = $self->{in}->readline($EOL) or last;
             my $msg = decode($line);
             my ($id, $data) = @$msg;
+
             $self->{inbox}{$id}->put($data);
         }
 
+        # Disconnected
         $self->{inbox_running} = 0;
     };
 
@@ -57,14 +58,9 @@ sub DESTROY {
         && $self->{inbox_mon};
 }
 
-sub is_running {
-    my $self = shift;
-    return $self->{inbox_running};
-}
-
 sub shutdown {
     my $self = shift;
-    return $self->write('SHUTDOWN');
+    $self->write('SHUTDOWN');
 }
 
 sub write {
@@ -83,6 +79,7 @@ sub send {
 
 sub recv {
     my ($self, $id) = @_;
+    croak 'msgid not found' unless exists $self->{inbox}{$id};
     my $data = $self->{inbox}{$id}->get;
     delete $self->{inbox}{$id};
     return $data;

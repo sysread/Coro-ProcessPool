@@ -3,6 +3,7 @@ package Coro::ProcessPool::Worker;
 use strict;
 use warnings;
 
+use Carp;
 use Coro;
 use Coro::AnyEvent;
 use Coro::Channel;
@@ -28,22 +29,6 @@ $SIG{KILL} = sub { stop() };
 
 sub stop {
     $RUNNING = 0;
-
-    if ($IN_WORKER) {
-        $IN_WORKER->safe_cancel;
-        $INBOX->shutdown;
-    }
-
-    if ($PROC_WORKER) {
-        $PROC_WORKER->join;
-        $OUTBOX->shutdown;
-    }
-
-    if ($OUT_WORKER) {
-        $OUT_WORKER->join;
-    }
-
-    exit 0;
 }
 
 sub start {
@@ -51,27 +36,39 @@ sub start {
 
     $IN_WORKER = async {
         while ($RUNNING) {
-            my $line = $IN->readline($EOL);
+            my $readable = eval { Coro::AnyEvent::readable($IN->fh, 0.1) };
+            my $closed   = $@;
 
-            if ($line) {
+            last if !$readable && $closed;
+
+            if ($readable) {
+                my $line = $IN->readline($EOL);
                 $INBOX->put($line);
             }
-            # Connection to parent broken; shut down inbox and wait for the
-            # remaining workers to complete.
-            else {
-                $RUNNING = 0;
-                $INBOX->shutdown;
+        }
 
-                if ($PROC_WORKER) {
-                    $PROC_WORKER->join;
-                    $OUTBOX->shutdown;
-                }
+        $INBOX->shutdown;
+        $PROC_WORKER->join;
+        $OUT_WORKER->join;
+    };
 
-                if ($OUT_WORKER) {
-                    $OUT_WORKER->join;
-                }
+    $PROC_WORKER = async {
+        while (1) {
+            my $line = $INBOX->get;
+            if ($line) {
+              my $data = decode($line);
+              my ($id, $task) = @$data;
 
-                last;
+              if (!ref($task) && $task eq 'SHUTDOWN') {
+                stop();
+                next;
+              }
+
+              my $reply = $class->process_task($task);
+              $OUTBOX->put(encode([$id, $reply]));
+            } else {
+              $OUTBOX->shutdown;
+              last;
             }
         }
     };
@@ -83,30 +80,16 @@ sub start {
         }
     };
 
-    $PROC_WORKER = async {
-        while (1) {
-            my $line = $INBOX->get or last;
-            my $data = decode($line);
-            my ($id, $task) = @$data;
-            my $reply = $class->process_task($task);
-            $OUTBOX->put(encode([$id, $reply]));
-        }
-    };
+    $IN_WORKER->join;
 
-    scope_guard { stop };
-
-    while ($RUNNING) {
-        Coro::AnyEvent::sleep $TIMEOUT;
-    }
+    exit 0;
 }
 
 sub process_task {
     my ($class, $task) = @_;
-    my ($f, $args) = @$task;
-
-    if (!ref($f) && $f eq 'SHUTDOWN') {
-      stop();
-      return;
+    my ($f, $args) = eval { @$task };
+    if ($@) {
+      confess $@;
     }
 
     my $result = eval {

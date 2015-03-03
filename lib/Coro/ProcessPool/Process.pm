@@ -80,7 +80,7 @@ sub spawn {
 
     $self->{child_err_mon} = async {
         while (my $line = $self->{child_err}->readline) {
-            warn "(WORKER) $line";
+            warn "(WORKER PID $self->{pid}) $line";
         }
     };
 
@@ -100,14 +100,12 @@ sub terminate {
     if ($self->is_running) {
         my $pid = $self->{pid};
         $self->{mailbox}->shutdown;
-        $self->{child_err}->close;
-        $self->{child_err_mon}->safe_cancel;
         $self->{child_err_mon}->join;
 
         while ($pid > 0) {
             $pid = waitpid($pid, WNOHANG);
             Coro::AnyEvent::sleep(0.1)
-                if $pid > 0;
+              if $pid > 0;
         }
     }
 
@@ -127,9 +125,6 @@ sub send {
 
 sub recv {
     my ($self, $msgid) = @_;
-    croak 'not running'
-        unless $self->is_running
-            or $self->{mailbox}->is_running;
     my $data = $self->{mailbox}->recv($msgid);
     ++$self->{processed};
 
