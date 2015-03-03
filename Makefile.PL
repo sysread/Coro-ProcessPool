@@ -18,6 +18,7 @@ WriteMakefile(
         'Const::Fast'       => 0,
         'AnyEvent'          => 0,
         'Coro'              => 0,
+        'Data::UUID'        => 0,
         'String::Escape'    => 0,
         'Guard'             => 0,
         'Test::TinyMocker'  => 0,

@@ -8,6 +8,7 @@ use Coro;
 use Coro::Handle qw(unblock);
 use Coro::Semaphore;
 use Coro::ProcessPool::Util qw(encode decode $EOL);
+use Data::UUID;
 
 sub new {
     my ($class, $fh_in, $fh_out) = @_;
@@ -68,7 +69,7 @@ sub shutdown {
 
 sub write {
     my ($self, $data) = @_;
-    my $id = ++$self->{counter};
+    my $id = Data::UUID->new->create_str;
     $self->{out}->print(encode([$id, $data]). $EOL);
     return $id;
 }

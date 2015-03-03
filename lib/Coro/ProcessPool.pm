@@ -24,7 +24,7 @@ sub new {
         max_reqs  => $param{max_reqs}  || 0,
         num_procs => 0,
         procs     => Coro::Channel->new(),
-        queue     => Coro::Channel->new(),
+        pending   => {},
     }, $class;
 }
 
@@ -81,7 +81,7 @@ sub checkout_proc {
     }
 }
 
-sub process {
+sub start_task {
     my ($self, $f, $args, $timeout) = @_;
     defined $f || croak 'expected CODE ref or task class (string) to execute';
     $args ||= [];
@@ -99,12 +99,30 @@ sub process {
     # Send the task
     my $msgid = $proc->send($f, $args);
 
-    # Replace process in the pool as soon as result is ready on the connection
-    $proc->readable;
-    $self->checkin_proc($proc);
+    # Note which process is handling this task
+    $self->{pending}{$msgid} = $proc;
 
-    # Collect and return the result
+    # Replace process in the pool as soon as result is ready on the connection
+    async_pool {
+        my ($self, $proc) = @_;
+        $proc->readable;
+        $self->checkin_proc($proc);
+    } $self, $proc;
+
+    return $msgid;
+}
+
+sub collect_task {
+    my ($self, $msgid) = @_;
+    my $proc = $self->{pending}{$msgid} || croak 'msgid not found';
+    delete $self->{pending}{$msgid};
     return $proc->recv($msgid);
+}
+
+sub process {
+    my $self  = shift;
+    my $msgid = $self->start_task(@_);
+    return $self->collect_task($msgid);
 }
 
 sub map {
@@ -114,36 +132,40 @@ sub map {
 }
 
 sub defer {
-    my ($self, $f, $args) = @_;
-    my $arr = wantarray;
-    my $cv  = AnyEvent->condvar;
+    my $self  = shift;
+    my $arr   = wantarray;
+    my $cv    = AnyEvent->condvar;
+    my $msgid = $self->start_task(@_);
 
     async_pool {
-        my $arr = shift;
+        my ($self, $arr, $msgid) = @_;
 
         if ($arr) {
-            my @results = eval { process(@_) };
+            my @results = eval { $self->collect_task($msgid) };
             $cv->croak($@) if $@;
             $cv->send(@results);
         } else {
-            my $result = eval { process(@_) };
+            my $result = eval { $self->collect_task($msgid) };
             $cv->croak($@) if $@;
             $cv->send($result);
         }
-    } $arr, $self, $f, $args;
+    } $self, $arr, $msgid;
 
     return sub { $cv->recv };
 }
 
 sub queue {
-    my $self = shift;
+    my ($self, $f, $args, $k) = @_;
+    my $deferred = $self->defer($f, $args);
+
     async_pool {
-        my ($f, $args, $k) = @_;
-        my $result = $self->process($f, $args);
+        my ($deferred, $k) = @_;
         if (ref $k && ref $k eq 'CODE') {
-            $k->($result);
+            $k->($deferred->());
+        } else {
+            $deferred->();
         }
-    } @_;
+    } $deferred, $k;
 }
 
 1;
