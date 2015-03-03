@@ -1,6 +1,5 @@
 0.17    2015-02-26
-    * More robust method for killing child processes
-    * Saner pool shutdown
+    * Rewrite of workflow for safe worker shutdown
     * Added queue() method
 
 0.16    2014-12-24
