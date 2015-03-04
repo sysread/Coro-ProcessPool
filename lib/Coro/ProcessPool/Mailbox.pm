@@ -61,6 +61,7 @@ sub DESTROY {
 sub shutdown {
     my $self = shift;
     $self->write('SHUTDOWN');
+    $self->{inbox_mon}->join;
 }
 
 sub write {

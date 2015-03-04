@@ -1,4 +1,7 @@
-0.17    2015-02-26
+0.18    2015-03-04
+    * Fixed ugly bug where pool did not automatically shut down
+
+0.17    2015-03-04
     * Rewrite of workflow for safe worker shutdown
     * Added queue() method
 

@@ -31,14 +31,17 @@ sub new {
 }
 
 sub DESTROY {
-    if ($_[0] && $_[0]->{pid}) {
-        my $pid = $_[0]->{pid};
-        while ($pid > 0) {
-            $pid = waitpid($pid, WNOHANG);
-            Coro::AnyEvent::sleep(0.1)
-                if $pid > 0;
-        }
-    }
+    my $self = shift;
+    $self->terminate;
+
+#    if ($_[0] && $_[0]->{pid}) {
+#        my $pid = $_[0]->{pid};
+#        while ($pid > 0) {
+#            $pid = waitpid($pid, WNOHANG);
+#            Coro::AnyEvent::sleep(0.1)
+#                if $pid > 0;
+#        }
+#    }
 }
 
 #-------------------------------------------------------------------------------
