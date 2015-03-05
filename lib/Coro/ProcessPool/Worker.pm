@@ -1,96 +1,99 @@
 package Coro::ProcessPool::Worker;
 
-use strict;
-use warnings;
-
-use Carp;
+use Moo;
+use Types::Standard qw(-types);
+use AnyEvent;
 use Coro;
-use Coro::AnyEvent;
-use Coro::Channel;
 use Coro::Handle;
-use Coro::ProcessPool::Util qw(encode decode $EOL);
-use Devel::StackTrace;
-use Guard qw(scope_guard);
+use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
 
-if ($^O eq 'MSWin32') {
-    die 'MSWin32 is not supported';
+has queue => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
+
+has input => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Handle'],
+    default => sub { unblock(*STDIN) },
+);
+
+has input_monitor => (
+    is  => 'lazy',
+    isa => InstanceOf['Coro'],
+);
+
+sub _build_input_monitor {
+    return async {
+        my $self = shift;
+        while (my $line = $self->input->readline($EOL)) {
+            my $data = decode($line);
+            my ($id, $task) = @$data;
+            $self->queue->put([$id, $task]);
+        }
+    } @_;
 }
 
-my $RUNNING = 1;
-my $TIMEOUT = 0.2;
-my $IN      = unblock *STDIN;
-my $OUT     = unblock *STDOUT;
-my $OUTBOX  = Coro::Channel->new();
-my $INBOX   = Coro::Channel->new();
-my ($IN_WORKER, $OUT_WORKER, $PROC_WORKER);
+has completed => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
 
-$SIG{KILL} = sub { stop() };
+has output => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Handle'],
+    default => sub { unblock(*STDOUT) },
+);
 
-sub stop {
-    $RUNNING = 0;
+has output_monitor => (
+    is  => 'lazy',
+    isa => InstanceOf['Coro'],
+);
+
+sub _build_output_monitor {
+    return async {
+        my $self = shift;
+        while (my $result = $self->completed->get) {
+            $self->output->print(encode($result) . $EOL);
+        }
+    } @_;
 }
 
-sub start {
-    my $class = shift;
+sub run {
+    my $self = shift;
 
-    $IN_WORKER = async {
-        while ($RUNNING) {
-            my $readable = eval { Coro::AnyEvent::readable($IN->fh, 0.1) };
-            my $closed   = $@;
+    while (1) {
+        my $job = $self->queue->get or last;
+        my ($id, $task) = @$job;
 
-            last if !$readable && $closed;
+        if (!ref($task) && $task eq 'SHUTDOWN') {
+            $self->input_monitor->safe_cancel;
+            $self->queue->shutdown;
 
-            if ($readable) {
-                my $line = $IN->readline($EOL);
-                $INBOX->put($line);
-            }
+            $self->completed->put([$id, [0, 'OK']]);
+            next;
         }
 
-        $INBOX->shutdown;
-        $PROC_WORKER->join;
-        $OUT_WORKER->join;
-    };
+        my $reply = $self->process_task($task);
+        $self->completed->put([$id, $reply]);
+    }
 
-    $PROC_WORKER = async {
-        while (1) {
-            my $line = $INBOX->get;
-            if ($line) {
-              my $data = decode($line);
-              my ($id, $task) = @$data;
-
-              if (!ref($task) && $task eq 'SHUTDOWN') {
-                stop();
-                next;
-              }
-
-              my $reply = $class->process_task($task);
-              $OUTBOX->put(encode([$id, $reply]));
-            } else {
-              $OUTBOX->shutdown;
-              last;
-            }
-        }
-    };
-
-    $OUT_WORKER = async {
-        while (1) {
-            my $line = $OUTBOX->get or last;
-            $OUT->print($line . $EOL);
-        }
-    };
-
-    $IN_WORKER->join;
-
-    exit 0;
+    $self->completed->shutdown;
+    $self->output_monitor->join;
 }
+
+before run => sub {
+    my $self = shift;
+    $self->input_monitor;
+    $self->output_monitor;
+};
 
 sub process_task {
     my ($class, $task) = @_;
-    my ($f, $args) = eval { @$task };
-    if ($@) {
-      confess $@;
-    }
+    my ($f, $args) = @$task;
 
     my $result = eval {
         if (ref $f && ref $f eq 'CODE') {
@@ -109,7 +112,7 @@ sub process_task {
         my $trace = Devel::StackTrace->new(
             message      => $error,
             indent       => 1,
-            ignore_class => [$class, 'Coro', 'AnyEvent'],
+            ignore_class => ['Coro::ProcessPool::Util', 'Coro', 'AnyEvent'],
         );
         return [1, $trace->as_string];
     }

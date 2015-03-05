@@ -6,11 +6,15 @@ BEGIN { use AnyEvent::Impl::Perl }
 
 my $class = 'Coro::ProcessPool::Worker';
 
+my $doubler = sub {
+    my $x = shift;
+    return $x * 2;
+};
+
 SKIP: {
     skip 'does not run under MSWin32' if $^O eq 'MSWin32';
     use_ok($class) or BAIL_OUT;
 
-    my $doubler = sub { my ($x) = @_; return $x * 2; };
     my $success = $class->process_task([$doubler, [21]]);
     is_deeply($success, [0, 42], 'code ref-based task produces expected result');
 

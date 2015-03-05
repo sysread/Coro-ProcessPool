@@ -14,18 +14,27 @@ BEGIN { use AnyEvent::Impl::Perl }
 
 my $class = 'Coro::ProcessPool';
 
+my $doubler = sub {
+    my $x = shift;
+    return $x * 2;
+};
+
 SKIP: {
     skip 'does not run under MSWin32' if $^O eq 'MSWin32';
 
     use_ok($class) or BAIL_OUT;
 
-    my $cpus = cpu_count();
-    my $pool = new_ok($class, [max_reqs => 5]) or BAIL_OUT 'Failed to create class';
-    is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
-
-    my $doubler = sub { $_[0] * 2 };
+    subtest 'start & stop' => sub {
+        my $cpus = cpu_count();
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+    };
 
     subtest 'checkout_proc' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my @procs;
 
         # Checkout with no processes created
@@ -61,30 +70,53 @@ SKIP: {
             ok($@, 'error thrown after timeout');
             ok($@ =~ 'timed out', 'expected error');
         }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+    };
+
+    subtest 'send task' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
+        ok(my $msgid = $pool->start_task($doubler, [21]), 'start_task');
+        ok(my $result = $pool->collect_task($msgid), 'collect_task');
+        is($result, 42, 'correct result');
+
+        my @range = 1 .. $pool->{num_procs};
+        my %pending;
+        foreach my $i (@range) {
+            ok(my $msgid = $pool->start_task($doubler, [$i]), 'start_task');
+            $pending{$i} = $msgid;
+        }
+
+        foreach my $i (shuffle(keys %pending)) {
+            my $msgid = $pending{$i};
+            ok(my $result = $pool->collect_task($msgid), 'collect_task');
+            is($result, $i * 2, 'correct result');
+        }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     subtest 'process' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my $count = 20;
-        my @threads;
         my %result;
 
-        foreach my $i (shuffle 1 .. $count) {
-            my $thread = async {
-                my $n = shift;
-                $result{$n} = $pool->process($doubler, [ $n ]);
-            } $i;
-
-            push @threads, $thread;
-        }
-
-        $_->join foreach @threads;
-
         foreach my $i (1 .. $count) {
-            is($result{$i}, $i * 2, 'expected result');
+            my $result = $pool->process($doubler, [ $i ]);
+            is($result, $i * 2, 'expected result');
         }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     subtest 'defer' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my $count = 20;
         my %result;
 
@@ -95,16 +127,26 @@ SKIP: {
         foreach my $i (1 .. $count) {
             is($result{$i}->(), $i * 2, 'expected result');
         }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     subtest 'map' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my @numbers  = 1 .. 100;
         my @expected = map { $_ * 2 } @numbers;
         my @actual   = $pool->map($doubler, @numbers);
         is_deeply(\@actual, \@expected, 'expected result');
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     subtest 'fail' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my $croaker = sub {
             my ($x) = @_;
             return $x / 0;
@@ -114,9 +156,14 @@ SKIP: {
         my $error  = $@;
 
         ok($error, 'processing failure croaks');
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     subtest 'queue' => sub {
+        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+
         my $count = 100;
         my $done  = AnyEvent->condvar;
         my %result;
@@ -141,9 +188,10 @@ SKIP: {
         foreach my $i (1 .. $count) {
             is($result{$i}, $i * 2, 'expected result');
         }
-    };
 
-    $pool->shutdown;
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+    };
 };
 
 done_testing;

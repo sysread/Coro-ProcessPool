@@ -3,15 +3,28 @@ package Coro::ProcessPool::Util;
 use strict;
 use warnings;
 use Carp;
+use Config;
 use Const::Fast;
+use Coro::AnyEvent;
 use Storable;
 use Coro::Storable qw(nfreeze thaw);
 use MIME::Base64   qw(encode_base64 decode_base64);
+use String::Escape qw(backslash);
+use Devel::StackTrace;
+use Module::Load qw(load);
 
 use base qw(Exporter);
-our @EXPORT_OK = qw(cpu_count encode decode $EOL);
+our @EXPORT_OK = qw(
+    get_command_path
+    get_args
+    cpu_count
+    encode
+    decode
+    $EOL
+);
 
 const our $EOL => "\n";
+const our $DEFAULT_READ_TIMEOUT => 0.1;
 
 sub encode {
     no warnings 'once';
@@ -28,6 +41,19 @@ sub decode {
     my $line = shift or croak 'decode: expected line';
     my $data = decode_base64($line) or croak 'invalid data';
     return thaw($data);
+}
+
+sub get_command_path {
+    my $perl = $Config{perlpath};
+    my $ext  = $Config{_exe};
+    $perl .= $ext if $^O ne 'VMS' && $perl !~ /$ext$/i;
+    return $perl;
+}
+
+sub get_args {
+    my @inc  = map { sprintf('-I%s', backslash($_)) } @INC;
+    my $cmd  = q|-MCoro::ProcessPool::Worker -e 'Coro::ProcessPool::Worker->new->run'|;
+    return join ' ', @inc, $cmd;
 }
 
 #-------------------------------------------------------------------------------

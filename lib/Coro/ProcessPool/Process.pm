@@ -1,138 +1,246 @@
 package Coro::ProcessPool::Process;
 
-use strict;
-use warnings;
+use Moo;
 use Carp;
+use Coro;
+use Coro::AnyEvent;
+use Const::Fast;
+use Data::UUID;
+use Types::Standard         qw(-types);
+use Coro::Handle            qw(unblock);
+use IPC::Open3              qw(open3);
+use POSIX                   qw(:sys_wait_h);
+use Symbol                  qw(gensym);
+use Time::HiRes             qw(time);
+use Coro::ProcessPool::Util qw(get_command_path get_args encode decode $EOL);
 
-use Config;
-use Coro                        qw(async cede);
-use Coro::AnyEvent              qw();
-use Coro::Handle                qw(unblock);
-use Coro::ProcessPool::Mailbox  qw();
-use Coro::ProcessPool::Util     qw(encode decode $EOL);
-use IPC::Open3                  qw(open3);
-use POSIX                       qw(:sys_wait_h);
-use String::Escape              qw(backslash);
-use Symbol                      qw(gensym);
+const our $DEFAULT_WAITPID_INTERVAL => 0.1;
+const our $DEFAULT_KILL_TIMEOUT     => 15;
 
-if ($^O eq 'MSWin32') {
-    die 'MSWin32 is not supported';
-}
+BEGIN {
+    if ($^O eq 'MSWin32') {
+        die 'MSWin32 is not supported';
+    }
+};
 
-sub new {
-    my ($class, %param) = @_;
-    return bless {
-        processed     => 0,
-        pid           => undef,
-        child_err     => undef,
-        child_err_mon => undef,
-        mailbox       => undef,
-    }, $class;
-}
+sub BUILDARGS {
+    my ($class, %args) = @_;
 
-sub DESTROY {
-    my $self = shift;
-    $self->terminate;
-}
-
-#-------------------------------------------------------------------------------
-# Return the full path to the perl binary used to launch the parent in order to
-# ensure that children are run on the same perl version.
-#-------------------------------------------------------------------------------
-sub get_command_path {
-    my $self = shift;
-    my $perl = $Config{perlpath};
-    my $ext  = $Config{_exe};
-    $perl .= $ext if $^O ne 'VMS' && $perl !~ /$ext$/i;
-    return $perl;
-}
-
-sub get_args {
-    my $self = shift;
-    my @inc  = map { sprintf('-I%s', backslash($_)) } @INC;
-    my $cmd  = q|-MCoro::ProcessPool::Worker -e 'Coro::ProcessPool::Worker->start()'|;
-    return join ' ', @inc, $cmd;
-}
-
-#-------------------------------------------------------------------------------
-# Executes the child process and configures streams and handles for IPC. Croaks
-# on failure.
-#-------------------------------------------------------------------------------
-sub spawn {
-    my $self = shift;
     my ($r, $w, $e) = (gensym, gensym, gensym);
-
-    my $cmd  = $self->get_command_path;
-    my $args = $self->get_args;
+    my $cmd  = get_command_path;
+    my $args = get_args;
     my $exec = "$cmd $args";
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 
-    $self->{pid}        = $pid;
-    $self->{child_err}  = unblock $e;
-    $self->{processed}  = 0;
-    $self->{mailbox}    = Coro::ProcessPool::Mailbox->new($r, $w);
+    $args{pid}       = $pid;
+    $args{child_in}  = unblock $r;
+    $args{child_out} = unblock $w;
+    $args{child_err} = unblock $e;
 
-    $self->{child_err_mon} = async {
-        while (my $line = $self->{child_err}->readline) {
-            warn "(WORKER PID $self->{pid}) $line";
+    return \%args;
+}
+
+sub BUILD {
+    my $self = shift;
+    $self->child_in_watcher;
+    $self->child_err_watcher;
+    return $self;
+}
+
+sub DEMOLISH {
+    my ($self, $global_destruct) = @_;
+    $self->shutdown;
+}
+
+has messages_sent => (
+    is       => 'rw',
+    isa      => Int,
+    init_arg => undef,
+    default  => 0,
+);
+
+has pid => (
+    is        => 'ro',
+    isa       => Int,
+    required  => 1,
+    clearer   => 'clear_pid',
+    predicate => 'is_running',
+);
+
+has child_in => (
+    is       => 'ro',
+    isa      => InstanceOf['Coro::Handle'],
+    required => 1,
+    clearer  => 'clear_child_in',
+);
+
+has child_out => (
+    is       => 'ro',
+    isa      => InstanceOf['Coro::Handle'],
+    required => 1,
+    clearer  => 'clear_child_out',
+);
+
+has child_err => (
+    is       => 'ro',
+    isa      => InstanceOf['Coro::Handle'],
+    required => 1,
+    clearer  => 'clear_child_err',
+);
+
+has inbox => (
+    is       => 'ro',
+    isa      => HashRef[Str, InstanceOf['Coro::Channel']],
+    default  => sub { {} },
+);
+
+has on_read => (
+    is      => 'rw',
+    isa     => Maybe[CodeRef],
+    clearer => 'clear_on_read',
+);
+
+has child_in_watcher => (
+    is       => 'lazy',
+    isa      => InstanceOf['Coro'],
+    init_arg => undef,
+    clearer  => 'clear_child_in_watcher',
+);
+
+sub _build_child_in_watcher {
+    return async {
+        my $self = shift;
+
+        while (my $line = $self->child_in->readline($EOL)) {
+            if ($self->on_read) {
+                $self->on_read->();
+                $self->clear_on_read;
+            }
+
+            my $msg  = decode($line);
+            my ($id, $data) = @$msg;
+
+            if (exists $self->inbox->{$id}) {
+                $self->inbox->{$id}->send($data);
+            } else {
+                warn "Unexpected message received: $id";
+            }
         }
-    };
-
-    return $pid;
+    } @_;
 }
 
-sub is_running {
-    my $self = shift;
-    return $self->{pid}
-        && kill(0, $self->{pid})
-        && !$!{ESRCH};
+has child_err_watcher => (
+    is       => 'lazy',
+    isa      => InstanceOf['Coro'],
+    init_arg => undef,
+    clearer  => 'clear_child_err_watcher',
+);
+
+sub _build_child_err_watcher {
+    return async {
+        my $self = shift;
+        while (my $line = $self->child_err->readline($EOL)) {
+            warn sprintf("(WORKER PID %s) %s", ($self->pid || '(DEAD)'), $line);
+        }
+    } @_;
 }
 
-sub terminate {
+sub cleanup {
     my $self = shift;
 
-    if ($self->is_running) {
-        my $pid = $self->{pid};
-        $self->{mailbox}->shutdown;
-        $self->{child_err_mon}->join;
+    if ($self->child_out) {
+        $self->child_out->close;
+        $self->clear_child_out;
+    }
 
-        while ($pid > 0) {
-            $pid = waitpid($pid, WNOHANG);
-            Coro::AnyEvent::sleep(0.1)
-              if $pid > 0;
+    if ($self->child_in) {
+        $self->child_in_watcher->join;
+        $self->child_in->close;
+        $self->clear_child_in_watcher;
+        $self->clear_child_in;
+    }
+
+    if ($self->child_err) {
+        $self->child_err->close;
+        $self->child_err_watcher->join;
+        $self->clear_child_err_watcher;
+        $self->clear_child_err;
+    }
+}
+
+sub join {
+    my ($self, $timeout) = @_;
+    my $pid   = $self->pid;
+    my $start = time;
+
+    while ($pid > 0) {
+        $pid = waitpid($pid, WNOHANG);
+        Coro::AnyEvent::sleep($DEFAULT_WAITPID_INTERVAL)
+          if $pid > 0;
+
+        if ($timeout) {
+            my $spent = time - $start;
+            if ($spent >= $timeout) {
+                return 0;
+            }
         }
     }
 
-    undef $self->{pid};
-    undef $self->{child_err};
-    undef $self->{child_err_mon};
-
+    $self->clear_pid;
     return 1;
+}
+
+sub kill_process {
+    my ($self, $timeout) = @_;
+    $timeout ||= $DEFAULT_KILL_TIMEOUT;
+
+    return unless $self->is_running;
+
+    my $id = $self->write('SHUTDOWN');
+    my $reply = $self->recv($id);
+    $self->child_out->close;
+
+    until ($self->join($timeout)) {
+        kill('KILL', $self->pid);
+    }
+}
+
+sub shutdown {
+    my $self = shift;
+    $self->kill_process;
+    $self->cleanup;
+    return 1;
+}
+
+sub write {
+    my ($self, $data) = @_;
+    my $id = Data::UUID->new->create_str();
+    $self->inbox->{$id} = AnyEvent->condvar;
+    $self->child_out->print(encode([$id, $data]) . $EOL);
+    ++$self->{messages_sent};
+    return $id;
 }
 
 sub send {
     my ($self, $f, $args) = @_;
     croak 'not running' unless $self->is_running;
     $args ||= [];
-    return $self->{mailbox}->send([$f, $args]);
+    return $self->write([$f, $args]);
 }
 
 sub recv {
-    my ($self, $msgid) = @_;
-    my $data = $self->{mailbox}->recv($msgid);
-    ++$self->{processed};
+    my ($self, $id) = @_;
+    croak 'message id not specified' unless $id;
+    croak 'message id not found' unless exists $self->inbox->{$id};
+
+    my $data = $self->inbox->{$id}->recv;
+    delete $self->inbox->{$id};
 
     if ($data->[0]) {
         croak $data->[1];
     } else {
         return $data->[1];
     }
-}
-
-sub readable {
-    my $self = shift;
-    croak 'not running' unless $self->is_running;
-    $self->{mailbox}->readable;
 }
 
 1;

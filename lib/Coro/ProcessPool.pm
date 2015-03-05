@@ -37,7 +37,7 @@ sub shutdown {
     my $self = shift;
     for (1 .. $self->{num_procs}) {
         my $proc = $self->{procs}->get;
-        $proc->terminate;
+        $proc->shutdown;
         --$self->{num_procs};
     }
 }
@@ -45,7 +45,6 @@ sub shutdown {
 sub start_proc {
     my $self = shift;
     my $proc = Coro::ProcessPool::Process->new();
-    $proc->spawn;
     ++$self->{num_procs};
     return $proc;
 }
@@ -94,25 +93,11 @@ sub start_task {
 
     my $proc = $self->checkout_proc($timeout);
 
-    # Restart the process if the worker is exhausted
-    my $thread;
-    if ($self->{max_reqs} > 0 && $proc->{processed} >= $self->{max_reqs}) {
-        $self->kill_proc($proc);
-        $proc = $self->start_proc;
-    }
-
     # Send the task
     my $msgid = $proc->send($f, $args);
 
     # Note which process is handling this task
     $self->{pending}{$msgid} = $proc;
-
-    # Replace process in the pool as soon as result is ready on the connection
-    async_pool {
-        my ($self, $proc) = @_;
-        $proc->readable;
-        $self->checkin_proc($proc);
-    } $self, $proc;
 
     return $msgid;
 }
@@ -121,6 +106,7 @@ sub collect_task {
     my ($self, $msgid) = @_;
     my $proc = $self->{pending}{$msgid} || croak 'msgid not found';
     delete $self->{pending}{$msgid};
+    $self->checkin_proc($proc);
     return $proc->recv($msgid);
 }
 
@@ -138,23 +124,15 @@ sub map {
 
 sub defer {
     my $self  = shift;
-    my $arr   = wantarray;
     my $cv    = AnyEvent->condvar;
     my $msgid = $self->start_task(@_);
 
     async_pool {
-        my ($self, $arr, $msgid) = @_;
-
-        if ($arr) {
-            my @results = eval { $self->collect_task($msgid) };
-            $cv->croak($@) if $@;
-            $cv->send(@results);
-        } else {
-            my $result = eval { $self->collect_task($msgid) };
-            $cv->croak($@) if $@;
-            $cv->send($result);
-        }
-    } $self, $arr, $msgid;
+        my ($self, $msgid) = @_;
+        my $result = eval { $self->collect_task($msgid) };
+        $cv->croak($@) if $@;
+        $cv->send($result);
+    } $self, $msgid;
 
     return sub { $cv->recv };
 }
