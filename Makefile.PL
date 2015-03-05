@@ -26,6 +26,7 @@ WriteMakefile(
         'Storable'          => '2.05',
         'String::Escape'    => 0,
         'Test::TinyMocker'  => 0,
+        'Types::Standard'   => 0,
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,
