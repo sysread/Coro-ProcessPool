@@ -1,9 +1,8 @@
 package Coro::ProcessPool;
 
-use strict;
-use warnings;
+use Moo;
+use Types::Standard qw(-types);
 use Carp;
-
 use AnyEvent;
 use Coro;
 use Coro::AnyEvent qw(sleep);
@@ -11,32 +10,51 @@ use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util qw(cpu_count);
 
-our $VERSION = '0.18';
+our $VERSION = '0.18_1';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
 
-sub new {
-    my ($class, %param) = @_;
-    return bless {
-        max_procs => $param{max_procs} || cpu_count,
-        max_reqs  => $param{max_reqs}  || 0,
-        num_procs => 0,
-        procs     => Coro::Channel->new(),
-        pending   => {},
-    }, $class;
-}
+has max_procs => (
+    is      => 'ro',
+    isa     => Int,
+    default => \&cpu_count,
+);
 
-sub DESTROY {
+has max_reqs => (
+    is      => 'ro',
+    isa     => Int,
+    default => 0,
+);
+
+has num_procs => (
+    is      => 'rw',
+    isa     => Int,
+    default => 0,
+);
+
+has procs => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
+
+has pending => (
+    is      => 'ro',
+    isa     => Map[Str, InstanceOf['Coro::ProcessPool::Process']],
+    default => sub { {} },
+);
+
+sub DEMOLISH {
   my $self = shift;
   $self->shutdown;
 }
 
 sub shutdown {
     my $self = shift;
-    for (1 .. $self->{num_procs}) {
-        my $proc = $self->{procs}->get;
+    for (1 .. $self->num_procs) {
+        my $proc = $self->procs->get;
         $proc->shutdown;
         --$self->{num_procs};
     }
@@ -57,23 +75,23 @@ sub kill_proc {
 
 sub checkin_proc {
     my ($self, $proc) = @_;
-    $self->{procs}->put($proc);
+    $self->procs->put($proc);
 }
 
 sub checkout_proc {
     my ($self, $timeout) = @_;
 
     # Start a new process if none are available and there are worker slots open
-    if ($self->{procs}->size == 0 && $self->{num_procs} < $self->{max_procs}) {
+    if ($self->procs->size == 0 && $self->num_procs < $self->max_procs) {
         return $self->start_proc;
     }
 
     if (!defined $timeout) {
-        return $self->{procs}->get;
+        return $self->procs->get;
     } else {
         my $cv           = AnyEvent->condvar;
         my $thread_timer = async { Coro::AnyEvent::sleep($timeout), $cv->send(0) };
-        my $thread_proc  = async { $cv->send($self->{procs}->get) };
+        my $thread_proc  = async { $cv->send($self->procs->get) };
         my $proc         = $cv->recv;
 
         if ($proc) {
@@ -92,20 +110,28 @@ sub start_task {
     ref $args eq 'ARRAY' || croak 'expected ARRAY ref of arguments';
 
     my $proc = $self->checkout_proc($timeout);
+    my $msgid;
 
-    # Send the task
-    my $msgid = $proc->send($f, $args);
+    eval {
+        # Send the task
+        $msgid = $proc->send($f, $args);
 
-    # Note which process is handling this task
-    $self->{pending}{$msgid} = $proc;
+        # Note which process is handling this task
+        $self->pending->{$msgid} = $proc;
+    };
 
-    return $msgid;
+    if ($@) {
+        $self->checkin_proc($proc);
+        croak $@;
+    } else {
+        return $msgid;
+    }
 }
 
 sub collect_task {
     my ($self, $msgid) = @_;
-    my $proc = $self->{pending}{$msgid} || croak 'msgid not found';
-    delete $self->{pending}{$msgid};
+    my $proc = $self->pending->{$msgid} || croak 'msgid not found';
+    delete $self->pending->{$msgid};
     $self->checkin_proc($proc);
     return $proc->recv($msgid);
 }
