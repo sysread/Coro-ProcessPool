@@ -50,10 +50,14 @@ has pending => (
 );
 
 has inbox => (
-    is      => 'ro',
+    is      => 'lazy',
     isa     => InstanceOf['Coro::Channel'],
-    default => sub { Coro::Channel->new() },
 );
+
+sub _build_inbox {
+  my $self = shift;
+  return Coro::Channel->new($self->max_procs);
+}
 
 has inbox_worker => (
     is  => 'lazy',
@@ -64,7 +68,8 @@ sub _build_inbox_worker {
     async {
         my $self = shift;
 
-        while (my $task = $self->inbox->get) {
+        while (1) {
+            my $task = $self->inbox->get or last;
             my ($f, $args, $on_success, $on_error) = @$task;
             my $msgid = $self->start_task($f, $args);
 
@@ -202,8 +207,9 @@ sub start_task {
     };
 
     if ($@) {
+        my $error = $@;
         $self->checkin_proc($proc);
-        croak $@;
+        croak $error;
     } else {
         return $msgid;
     }
@@ -213,7 +219,12 @@ sub collect_task {
     my ($self, $msgid) = @_;
     my $proc = $self->pending->{$msgid} || croak 'msgid not found';
     delete $self->pending->{$msgid};
-    $self->checkin_proc($proc);
+
+    async_pool {
+      my ($self, $proc) = @_;
+      $self->checkin_proc($proc)
+    } $self, $proc;
+
     return $proc->recv($msgid);
 }
 
