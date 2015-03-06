@@ -44,6 +44,7 @@ SKIP: {
 
             ok(defined $proc, 'new process spawned and acquired');
             isa_ok($proc, 'Coro::ProcessPool::Process');
+            ok(defined $proc->pid, 'new process has a pid');
 
             is($pool->num_procs, $i, 'process count correct');
             is($pool->capacity, 0, 'capacity correct');
