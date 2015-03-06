@@ -66,15 +66,16 @@ sub _build_inbox_worker {
 
         while (my $task = $self->inbox->get) {
             my ($f, $args, $on_success, $on_error) = @$task;
-            my $deferred = $self->defer($f, $args);
+            my $msgid = $self->start_task($f, $args);
 
             async_pool {
-                my ($deferred, $on_success, $on_error) = @_;
-                my $result = eval { $deferred->() };
+                my ($self, $msgid, $on_success, $on_error) = @_;
+                my $result = eval { $self->collect_task($msgid) };
 
                 if ($@) {
+                    my $error = $@;
                     if (ref $on_error && ref $on_error eq 'CODE') {
-                        $on_error->($@);
+                        $on_error->($error);
                     }
                 }
                 else {
@@ -82,7 +83,7 @@ sub _build_inbox_worker {
                         $on_success->($result);
                     }
                 }
-            } $deferred, $on_success, $on_error;
+            } $self, $msgid, $on_success, $on_error;
         }
     } @_;
 }
@@ -149,8 +150,10 @@ sub checkout_proc {
         return $self->start_proc;
     }
 
+    my $proc;
+
     if (!defined $timeout) {
-        return $self->procs->get;
+        $proc = $self->procs->get;
     } else {
         my $cv = AnyEvent->condvar;
 
@@ -167,17 +170,18 @@ sub checkout_proc {
             $cv->send($self->procs->get);
         } $self, $cv;
 
-        my $proc = $cv->recv;
+        $proc = $cv->recv;
 
         if ($proc) {
             $thread_timer->throw;
-            return $proc;
         } else {
             $thread_proc->cancel;
             $thread_proc->join;
             croak 'timed out waiting for available process';
         }
     }
+
+    return $proc;
 }
 
 sub start_task {
@@ -226,16 +230,16 @@ sub map {
 }
 
 sub defer {
-    my $self  = shift;
-    my $cv    = AnyEvent->condvar;
+    my $self = shift;
+    my $cv = AnyEvent->condvar;
     my $msgid = $self->start_task(@_);
 
     async_pool {
-        my ($self, $msgid) = @_;
+        my ($self, $msgid, $cv) = @_;
         my $result = eval { $self->collect_task($msgid) };
         $cv->croak($@) if $@;
         $cv->send($result);
-    } $self, $msgid;
+    } $self, $msgid, $cv;
 
     return sub { $cv->recv };
 }
