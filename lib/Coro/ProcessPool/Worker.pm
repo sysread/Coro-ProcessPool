@@ -28,11 +28,17 @@ has input_monitor => (
 sub _build_input_monitor {
     return async {
         my $self = shift;
-        while (my $line = $self->input->readline($EOL)) {
-            my $data = decode($line);
-            my ($id, $task) = @$data;
-            $self->queue->put([$id, $task]);
-        }
+
+        eval {
+            while (my $line = $self->input->readline($EOL)) {
+                my $data = decode($line);
+                my ($id, $task) = @$data;
+                $self->queue->put([$id, $task]);
+            }
+        };
+
+        return if $@ && $@ =~ /shutting down/;
+        $self->shutdown;
     } @_;
 }
 
@@ -56,24 +62,32 @@ has output_monitor => (
 sub _build_output_monitor {
     return async {
         my $self = shift;
-        while (my $result = $self->completed->get) {
-            $self->output->print(encode($result) . $EOL);
-        }
+
+        eval {
+            while (my $result = $self->completed->get) {
+                $self->output->print(encode($result) . $EOL);
+            }
+        };
+
+        return if $@ && $@ =~ /shutting down/;
+        $self->shutdown;
     } @_;
 }
 
 sub run {
     my $self = shift;
 
+    $SIG{KILL} = sub { $self->shutdown };
+    $SIG{TERM} = sub { $self->shutdown };
+    $SIG{HUP}  = sub { $self->shutdown };
+
     while (1) {
         my $job = $self->queue->get or last;
         my ($id, $task) = @$job;
 
         if (!ref($task) && $task eq 'SHUTDOWN') {
-            $self->input_monitor->safe_cancel;
-            $self->queue->shutdown;
-
             $self->completed->put([$id, [0, 'OK']]);
+            $self->shutdown;
             next;
         }
 
@@ -90,6 +104,12 @@ before run => sub {
     $self->input_monitor;
     $self->output_monitor;
 };
+
+sub shutdown {
+    my $self = shift;
+    $self->queue->shutdown;
+    $self->input_monitor->throw('shutting down');;
+}
 
 sub process_task {
     my ($class, $task) = @_;

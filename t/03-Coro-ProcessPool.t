@@ -33,29 +33,53 @@ SKIP: {
     };
 
     subtest 'checkout_proc' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $count = 4;
+        my $pool  = new_ok($class, [max_procs => $count])
+            or BAIL_OUT 'Failed to create class';
 
         my @procs;
 
-        # Checkout with no processes created
-        foreach (1 .. $pool->{max_procs}) {
+        foreach my $i (1 .. $pool->max_procs) {
             my $proc = $pool->checkout_proc;
+
             ok(defined $proc, 'new process spawned and acquired');
             isa_ok($proc, 'Coro::ProcessPool::Process');
+
+            is($pool->num_procs, $i, 'process count correct');
+            is($pool->capacity, 0, 'capacity correct');
+
             push @procs, $proc;
         }
 
-        $pool->checkin_proc($_) foreach @procs;
+        my $proc = eval { $pool->checkout_proc(1) };
+        ok(!defined $proc, 'no process returned after checkout timeout');
+        ok($@, 'error thrown after checkout timeout');
 
-        # Checkout with all processes created
+        my $i = 0;
+        foreach my $proc (@procs) {
+            $pool->checkin_proc($proc);
+            is($pool->capacity, ++$i, 'capacity correct');
+        }
+
+        is($pool->capacity, $count, 'correct pool capacity after all procs checked in');
+
         {
+            is($pool->capacity, $count, 'correct capacity');
+            is($pool->num_procs, $count, 'correct process count');
+
             my $proc = $pool->checkout_proc;
+
+            is($pool->capacity, $count - 1, 'correct capacity');
+            is($pool->num_procs, $count, 'correct process count');
+
             ok(defined $proc, 'previously spawned process acquired');
             isa_ok($proc, 'Coro::ProcessPool::Process');
+
             $pool->checkin_proc($proc);
         }
 
-        # Checkout with timeouts
+        is($pool->capacity, $count, 'correct pool capacity after all procs checked in');
+
         {
             my $proc = $pool->checkout_proc(1);
             ok(defined $proc, 'process acquired with timeout');
@@ -63,13 +87,29 @@ SKIP: {
             $pool->checkin_proc($proc);
         }
 
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+
+        eval { $pool->checkout_proc };
+        like($@, qr/not running/, 'checkout after shutdown throws error');
+    };
+
+    subtest 'max reqs' => sub {
+        my $pool = new_ok($class, [max_reqs => 1]) or BAIL_OUT 'Failed to create class';
+
+        # Check out proc, grab the pid, fudge messages sent, and check it back in
+        my $pid;
         {
-            mock 'Coro::Channel', 'get', sub { Coro::AnyEvent::sleep 2 };
-            scope_guard { unmock 'Coro::Channel', 'get' };
-            eval { $pool->checkout_proc(1) };
-            ok($@, 'error thrown after timeout');
-            ok($@ =~ 'timed out', 'expected error');
+            my $proc = $pool->checkout_proc;
+            $pid = $proc->pid;
+            ++$proc->{messages_sent};
+            $pool->checkin_proc($proc);
         }
+
+        # Check out new proc and verify it has a new pid
+        my $proc = $pool->checkout_proc;
+        ok($pid != $proc->pid, 'max_reqs correctly spawns new processes');
+        $pool->checkin_proc($proc);
 
         $pool->shutdown;
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');

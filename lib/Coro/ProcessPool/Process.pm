@@ -207,6 +207,7 @@ sub kill_process {
 
 sub shutdown {
     my $self = shift;
+    my $pid = $self->pid;
     $self->kill_process;
     $self->cleanup;
     return 1;

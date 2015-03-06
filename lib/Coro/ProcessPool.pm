@@ -38,12 +38,21 @@ has procs => (
     is      => 'ro',
     isa     => InstanceOf['Coro::Channel'],
     default => sub { Coro::Channel->new() },
+    handles => {
+        capacity => 'size',
+    }
 );
 
 has pending => (
     is      => 'ro',
     isa     => Map[Str, InstanceOf['Coro::ProcessPool::Process']],
     default => sub { {} },
+);
+
+has is_running => (
+    is      => 'rw',
+    isa     => Bool,
+    default => 1,
 );
 
 sub DEMOLISH {
@@ -53,10 +62,11 @@ sub DEMOLISH {
 
 sub shutdown {
     my $self = shift;
-    for (1 .. $self->num_procs) {
+    $self->is_running(0);
+    my $count = $self->num_procs;
+    for (1 .. $count) {
         my $proc = $self->procs->get;
-        $proc->shutdown;
-        --$self->{num_procs};
+        $self->kill_proc($proc);
     }
 }
 
@@ -69,17 +79,22 @@ sub start_proc {
 
 sub kill_proc {
     my ($self, $proc) = @_;
-    $proc->terminate;
+    $proc->shutdown;
     --$self->{num_procs};
 }
 
 sub checkin_proc {
     my ($self, $proc) = @_;
-    $self->procs->put($proc);
+    if (!$self->is_running || ($self->max_reqs && $proc->messages_sent >= $self->max_reqs)) {
+        $self->kill_proc($proc);
+    } else {
+        $self->procs->put($proc);
+    }
 }
 
 sub checkout_proc {
     my ($self, $timeout) = @_;
+    croak 'not running' unless $self->is_running;
 
     # Start a new process if none are available and there are worker slots open
     if ($self->procs->size == 0 && $self->num_procs < $self->max_procs) {
@@ -89,15 +104,29 @@ sub checkout_proc {
     if (!defined $timeout) {
         return $self->procs->get;
     } else {
-        my $cv           = AnyEvent->condvar;
-        my $thread_timer = async { Coro::AnyEvent::sleep($timeout), $cv->send(0) };
-        my $thread_proc  = async { $cv->send($self->procs->get) };
-        my $proc         = $cv->recv;
+        my $cv = AnyEvent->condvar;
+
+        my $thread_timer = async_pool {
+            my ($timeout, $cv) = @_;
+            eval {
+                Coro::AnyEvent::idle_upto($timeout);
+                $cv->send(0);
+            };
+        } $timeout, $cv;
+
+        my $thread_proc = async {
+            my ($self, $cv) = @_;
+            $cv->send($self->procs->get);
+        } $self, $cv;
+
+        my $proc = $cv->recv;
 
         if ($proc) {
-            $thread_timer->cancel;
+            $thread_timer->throw;
             return $proc;
         } else {
+            $thread_proc->cancel;
+            $thread_proc->join;
             croak 'timed out waiting for available process';
         }
     }

@@ -33,11 +33,12 @@ SKIP: {
         my $proc = new_ok($class);
         ok(my $pid = $proc->pid, 'spawned correctly');
 
+        my $count = 0;
         foreach my $i (@range) {
             ok(my $id = $proc->send(\&test_sub, [$i]), "send ($i)");
             ok(my $reply = $proc->recv($id), "recv ($i)");
             is($reply, $i * 2, "receives expected result ($i)");
-            is($proc->messages_sent, $i, "message count tracking ($i)");
+            is($proc->messages_sent, ++$count, "message count tracking ($i)");
         }
 
         $proc->shutdown;
