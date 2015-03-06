@@ -33,7 +33,7 @@ SKIP: {
     };
 
     subtest 'checkout_proc' => sub {
-        my $count = 4;
+        my $count = 2;
         my $pool  = new_ok($class, [max_procs => $count])
             or BAIL_OUT 'Failed to create class';
 
@@ -95,7 +95,7 @@ SKIP: {
     };
 
     subtest 'max reqs' => sub {
-        my $pool = new_ok($class, [max_reqs => 1]) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
 
         # Check out proc, grab the pid, fudge messages sent, and check it back in
         my $pid;
@@ -116,7 +116,7 @@ SKIP: {
     };
 
     subtest 'send task' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         ok(my $msgid = $pool->start_task($doubler, [21]), 'start_task');
         ok(my $result = $pool->collect_task($msgid), 'collect_task');
@@ -140,7 +140,7 @@ SKIP: {
     };
 
     subtest 'process' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
         my %result;
@@ -155,7 +155,7 @@ SKIP: {
     };
 
     subtest 'defer' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
         my %result;
@@ -173,7 +173,7 @@ SKIP: {
     };
 
     subtest 'map' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my @numbers  = 1 .. 100;
         my @expected = map { $_ * 2 } @numbers;
@@ -185,7 +185,7 @@ SKIP: {
     };
 
     subtest 'fail' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my $croaker = sub {
             my ($x) = @_;
@@ -202,7 +202,7 @@ SKIP: {
     };
 
     subtest 'queue' => sub {
-        my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 100;
         my $done  = AnyEvent->condvar;
