@@ -63,7 +63,7 @@ sub DEMOLISH {
 sub shutdown {
     my $self = shift;
     $self->is_running(0);
-    my $count = $self->num_procs;
+    my $count = $self->num_procs or return;
     for (1 .. $count) {
         my $proc = $self->procs->get;
         $self->kill_proc($proc);
