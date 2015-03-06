@@ -49,6 +49,44 @@ has pending => (
     default => sub { {} },
 );
 
+has inbox => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
+
+has inbox_worker => (
+    is  => 'lazy',
+    isa => InstanceOf['Coro'],
+);
+
+sub _build_inbox_worker {
+    async {
+        my $self = shift;
+
+        while (my $task = $self->inbox->get) {
+            my ($f, $args, $on_success, $on_error) = @$task;
+            my $deferred = $self->defer($f, $args);
+
+            async_pool {
+                my ($deferred, $on_success, $on_error) = @_;
+                my $result = eval { $deferred->() };
+
+                if ($@) {
+                    if (ref $on_error && ref $on_error eq 'CODE') {
+                        $on_error->($@);
+                    }
+                }
+                else {
+                    if (ref $on_success && ref $on_success eq 'CODE') {
+                        $on_success->($result);
+                    }
+                }
+            } $deferred, $on_success, $on_error;
+        }
+    } @_;
+}
+
 has is_running => (
     is      => 'rw',
     isa     => Bool,
@@ -56,13 +94,23 @@ has is_running => (
 );
 
 sub DEMOLISH {
-  my $self = shift;
-  $self->shutdown;
+    my $self = shift;
+    $self->shutdown;
+}
+
+sub BUILD {
+    my $self = shift;
+    $self->inbox_worker; # ensure the worker starts
 }
 
 sub shutdown {
     my $self = shift;
+
     $self->is_running(0);
+
+    $self->inbox->shutdown;
+    $self->inbox_worker->join;
+
     my $count = $self->num_procs or return;
     for (1 .. $count) {
         my $proc = $self->procs->get;
@@ -194,23 +242,7 @@ sub defer {
 
 sub queue {
     my ($self, $f, $args, $on_success, $on_error) = @_;
-    my $deferred = $self->defer($f, $args);
-
-    async_pool {
-        my ($deferred, $on_success, $on_error) = @_;
-        my $result = eval { $deferred->() };
-
-        if ($@) {
-            if (ref $on_error && ref $on_error eq 'CODE') {
-                $on_error->($@);
-            }
-        }
-        else {
-            if (ref $on_success && ref $on_success eq 'CODE') {
-                $on_success->($result);
-            }
-        }
-    } $deferred, $on_success, $on_error;
+    $self->inbox->put([$f, $args, $on_success, $on_error]);
 }
 
 1;
