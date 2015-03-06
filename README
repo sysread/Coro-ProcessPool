@@ -158,7 +158,7 @@ A NOTE ABOUT IMPORTS AND CLOSURES
         my $result = $pool->process(sub { $_[0]->bar }, [ $foo ]);
 
   Use versus require
-    The "use" pragma is run a compile time, whereas "require" is evaluated
+    The "use" pragma is run at compile time, whereas "require" is evaluated
     at runtime. Because of this, the use of "use" in code passed directly to
     the "process" method can fail because the "use" statement has already
     been evaluated when the calling code was compiled.
