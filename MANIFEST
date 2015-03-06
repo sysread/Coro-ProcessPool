@@ -4,7 +4,6 @@ MANIFEST
 README
 
 lib/Coro/ProcessPool.pm
-lib/Coro/ProcessPool/Mailbox.pm
 lib/Coro/ProcessPool/Process.pm
 lib/Coro/ProcessPool/Worker.pm
 lib/Coro/ProcessPool/Util.pm
