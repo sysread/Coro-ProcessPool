@@ -193,17 +193,24 @@ sub defer {
 }
 
 sub queue {
-    my ($self, $f, $args, $k) = @_;
+    my ($self, $f, $args, $on_success, $on_error) = @_;
     my $deferred = $self->defer($f, $args);
 
     async_pool {
-        my ($deferred, $k) = @_;
-        if (ref $k && ref $k eq 'CODE') {
-            $k->($deferred->());
-        } else {
-            $deferred->();
+        my ($deferred, $on_success, $on_error) = @_;
+        my $result = eval { $deferred->() };
+
+        if ($@) {
+            if (ref $on_error && ref $on_error eq 'CODE') {
+                $on_error->($@);
+            }
         }
-    } $deferred, $k;
+        else {
+            if (ref $on_success && ref $on_success eq 'CODE') {
+                $on_success->($result);
+            }
+        }
+    } $deferred, $on_success, $on_error;
 }
 
 1;
