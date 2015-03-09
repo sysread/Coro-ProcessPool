@@ -150,7 +150,7 @@ sub checkin_proc {
     if (!$self->is_running || ($self->max_reqs && $proc->messages_sent >= $self->max_reqs)) {
         $self->kill_proc($proc);
     } else {
-        push @{$self->procs}, $proc;
+        unshift @{$self->procs}, $proc;
     }
 }
 
