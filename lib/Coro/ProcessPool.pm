@@ -4,11 +4,13 @@ use Moo;
 use Types::Standard qw(-types);
 use Carp;
 use AnyEvent;
+use Guard;
 use Coro;
 use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util qw(cpu_count);
+use Coro::Semaphore;
 
 our $VERSION = '0.18_3';
 
@@ -28,6 +30,16 @@ has max_reqs => (
     default => 0,
 );
 
+has procs_lock => (
+    is      => 'lazy',
+    isa     => InstanceOf['Coro::Semaphore'],
+);
+
+sub _build_procs_lock {
+    my $self = shift;
+    return Coro::Semaphore->new($self->max_procs);
+}
+
 has num_procs => (
     is      => 'rw',
     isa     => Int,
@@ -36,17 +48,8 @@ has num_procs => (
 
 has procs => (
     is      => 'ro',
-    isa     => InstanceOf['Coro::Channel'],
-    default => sub { Coro::Channel->new() },
-    handles => {
-        capacity => 'size',
-    }
-);
-
-has pending => (
-    is      => 'ro',
-    isa     => Map[Str, InstanceOf['Coro::ProcessPool::Process']],
-    default => sub { {} },
+    isa     => ArrayRef[InstanceOf['Coro::Process']],
+    default => sub { [] },
 );
 
 has inbox => (
@@ -71,11 +74,10 @@ sub _build_inbox_worker {
         while (1) {
             my $task = $self->inbox->get or last;
             my ($f, $args, $on_success, $on_error) = @$task;
-            my $msgid = $self->start_task($f, $args);
 
             async_pool {
-                my ($self, $msgid, $on_success, $on_error) = @_;
-                my $result = eval { $self->collect_task($msgid) };
+                my ($self, $on_success, $on_error) = @_;
+                my $result = eval { $self->process($f, $args) };
 
                 if ($@) {
                     my $error = $@;
@@ -88,7 +90,7 @@ sub _build_inbox_worker {
                         $on_success->($result);
                     }
                 }
-            } $self, $msgid, $on_success, $on_error;
+            } $self, $on_success, $on_error;
         }
     } @_;
 }
@@ -109,6 +111,11 @@ sub BUILD {
     $self->inbox_worker; # ensure the worker starts
 }
 
+sub capacity {
+    my $self = shift;
+    return scalar(@{$self->procs});
+}
+
 sub shutdown {
     my $self = shift;
 
@@ -119,7 +126,7 @@ sub shutdown {
 
     my $count = $self->num_procs or return;
     for (1 .. $count) {
-        my $proc = $self->procs->get;
+        my $proc = shift @{$self->procs};
         $self->kill_proc($proc);
     }
 }
@@ -139,99 +146,40 @@ sub kill_proc {
 
 sub checkin_proc {
     my ($self, $proc) = @_;
+
     if (!$self->is_running || ($self->max_reqs && $proc->messages_sent >= $self->max_reqs)) {
         $self->kill_proc($proc);
     } else {
-        $self->procs->put($proc);
+        push @{$self->procs}, $proc;
     }
 }
 
 sub checkout_proc {
-    my ($self, $timeout) = @_;
+    my $self = shift;
     croak 'not running' unless $self->is_running;
-
-    # Start a new process if none are available and there are worker slots open
-    if ($self->procs->size == 0 && $self->num_procs < $self->max_procs) {
-        return $self->start_proc;
-    }
 
     my $proc;
 
-    if (!defined $timeout) {
-        $proc = $self->procs->get;
+    # Start a new process if none are available and there are worker slots open
+    if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
+        $proc = $self->start_proc;
     } else {
-        my $cv = AnyEvent->condvar;
-
-        my $thread_timer = async_pool {
-            my ($timeout, $cv) = @_;
-            eval {
-                Coro::AnyEvent::idle_upto($timeout);
-                $cv->send(0);
-            };
-        } $timeout, $cv;
-
-        my $thread_proc = async {
-            my ($self, $cv) = @_;
-            $cv->send($self->procs->get);
-        } $self, $cv;
-
-        $proc = $cv->recv;
-
-        if ($proc) {
-            $thread_timer->throw;
-        } else {
-            $thread_proc->cancel;
-            $thread_proc->join;
-            croak 'timed out waiting for available process';
-        }
+        $proc = shift @{$self->procs};
     }
 
     return $proc;
 }
 
-sub start_task {
-    my ($self, $f, $args, $timeout) = @_;
-    defined $f || croak 'expected CODE ref or task class (string) to execute';
-    $args ||= [];
-    ref $args eq 'ARRAY' || croak 'expected ARRAY ref of arguments';
-
-    my $proc = $self->checkout_proc($timeout);
-    my $msgid;
-
-    eval {
-        # Send the task
-        $msgid = $proc->send($f, $args);
-
-        # Note which process is handling this task
-        $self->pending->{$msgid} = $proc;
-    };
-
-    if ($@) {
-        my $error = $@;
-        $self->checkin_proc($proc);
-        croak $error;
-    } else {
-        return $msgid;
-    }
-}
-
-sub collect_task {
-    my ($self, $msgid) = @_;
-    my $proc = $self->pending->{$msgid} || croak 'msgid not found';
-    delete $self->pending->{$msgid};
-
-    async_pool {
-      my ($self, $proc) = @_;
-      $self->checkin_proc($proc)
-    } $self, $proc;
-
-    return $proc->recv($msgid);
-}
-
 sub process {
-    my $self  = shift;
-    my $msgid = $self->start_task(@_);
-    return $self->collect_task($msgid);
+    my ($self, $f, $args) = @_;
+
+    my $guard = $self->procs_lock->guard;
+
+    my $proc = $self->checkout_proc;
+    scope_guard { $self->checkin_proc($proc) };
+
+    my $msgid = $proc->send($f, $args);
+    return $proc->recv($msgid);
 }
 
 sub map {
@@ -242,15 +190,14 @@ sub map {
 
 sub defer {
     my $self = shift;
-    my $cv = AnyEvent->condvar;
-    my $msgid = $self->start_task(@_);
+    my $cv   = AnyEvent->condvar;
 
     async_pool {
-        my ($self, $msgid, $cv) = @_;
-        my $result = eval { $self->collect_task($msgid) };
+        my ($self, $cv, @args) = @_;
+        my $result = eval { $self->process(@args) };
         $cv->croak($@) if $@;
         $cv->send($result);
-    } $self, $msgid, $cv;
+    } $self, $cv, @_;
 
     return sub { $cv->recv };
 }
@@ -327,7 +274,7 @@ packages used by client code.
 
 =back
 
-=head2 process($f, $args, $timeout)
+=head2 process($f, $args)
 
 Processes code ref C<$f> in a child process from the pool. If C<$args> is
 provided, it is an array ref of arguments that will be passed to C<$f>. Returns
@@ -342,13 +289,6 @@ This call will yield until the results become available. If all processes are
 busy, this method will block until one becomes available. Processes are spawned
 as needed, up to C<max_procs>, from this method. Also note that the use of
 C<max_reqs> can cause this method to yield while a new process is spawned.
-
-A timeout may be optionally specified in fractional seconds. If specified,
-C<$timeout> will cause C<process> to croak if C<$timeout> seconds pass an no
-process becomes available to handle the task.
-
-Note that the timeout only applies to the time it takes to acquire an available
-process. It does not watch the time it takes to perform the task.
 
 =head2 map($f, @args)
 

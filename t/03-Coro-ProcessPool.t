@@ -52,10 +52,6 @@ SKIP: {
             push @procs, $proc;
         }
 
-        my $proc = eval { $pool->checkout_proc(1) };
-        ok(!defined $proc, 'no process returned after checkout timeout');
-        ok($@, 'error thrown after checkout timeout');
-
         my $i = 0;
         foreach my $proc (@procs) {
             $pool->checkin_proc($proc);
@@ -80,13 +76,6 @@ SKIP: {
         }
 
         is($pool->capacity, $count, 'correct pool capacity after all procs checked in');
-
-        {
-            my $proc = $pool->checkout_proc(1);
-            ok(defined $proc, 'process acquired with timeout');
-            isa_ok($proc, 'Coro::ProcessPool::Process');
-            $pool->checkin_proc($proc);
-        }
 
         $pool->shutdown;
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
@@ -128,30 +117,6 @@ SKIP: {
             my $proc = $pool->checkout_proc;
             is($pid, $proc->pid, 'max_reqs does not respawn when unnecessary');
             $pool->checkin_proc($proc);
-        }
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
-    };
-
-    subtest 'send task' => sub {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
-        ok(my $msgid = $pool->start_task($doubler, [21]), 'start_task');
-        ok(my $result = $pool->collect_task($msgid), 'collect_task');
-        is($result, 42, 'correct result');
-
-        my @range = 1 .. $pool->{num_procs};
-        my %pending;
-        foreach my $i (@range) {
-            ok(my $msgid = $pool->start_task($doubler, [$i]), 'start_task');
-            $pending{$i} = $msgid;
-        }
-
-        foreach my $i (shuffle(keys %pending)) {
-            my $msgid = $pending{$i};
-            ok(my $result = $pool->collect_task($msgid), 'collect_task');
-            is($result, $i * 2, 'correct result');
         }
 
         $pool->shutdown;
@@ -251,6 +216,7 @@ SKIP: {
         $pool->shutdown;
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
+
 };
 
 done_testing;
