@@ -12,7 +12,7 @@ use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util qw(cpu_count);
 use Coro::Semaphore;
 
-our $VERSION = '0.18_3';
+our $VERSION = '0.18_4';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
