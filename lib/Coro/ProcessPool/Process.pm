@@ -56,7 +56,7 @@ has messages_sent => (
     is       => 'rw',
     isa      => Int,
     init_arg => undef,
-    default  => 0,
+    default  => sub { 0 },
 );
 
 has pid => (
