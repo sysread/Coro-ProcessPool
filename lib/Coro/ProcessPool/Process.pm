@@ -199,7 +199,7 @@ sub kill_process {
     my $reply = $self->recv($id);
     $self->child_out->close;
 
-    until ($self->join) {
+    until ($self->join($timeout)) {
         kill('KILL', $self->pid);
     }
 }
