@@ -1,5 +1,46 @@
 package Coro::ProcessPool;
 
+=head1 NAME
+
+Coro::ProcessPool - an asynchronous process pool
+
+=head1 SYNOPSIS
+
+    use Coro::ProcessPool;
+
+    my $pool = Coro::ProcessPool->new(
+        max_procs => 4,
+        max_reqs  => 100,
+    );
+
+    my $double = sub { $_[0] * 2 };
+
+    # Process in sequence
+    my %result;
+    foreach my $i (1 .. 1000) {
+        $result{$i} = $pool->process($double, [$i]);
+    }
+
+    # Process as a batch
+    my @results = $pool->map($double, 1 .. 1000);
+
+    # Defer waiting for result
+    my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
+    foreach my $i (keys %deferred) {
+        print "$i = " . $deferred{$i}->() . "\n";
+    }
+
+    # Use a "task class", implementing 'new' and 'run'
+    my $result = $pool->process('Task::Doubler', 21);
+
+    $pool->shutdown;
+
+=head1 DESCRIPTION
+
+Processes tasks using a pool of external Perl processes.
+
+=cut
+
 use Moo;
 use Types::Standard qw(-types);
 use Carp;
@@ -12,11 +53,20 @@ use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util qw(cpu_count);
 use Coro::Semaphore;
 
-our $VERSION = '0.18_4';
+our $VERSION = '0.18_5';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
 }
+
+=head1 ATTRIBUTES
+
+=head2 max_procs
+
+The maximum number of processes to run within the process pool. Defaults
+to the number of CPUs on the ssytem.
+
+=cut
 
 has max_procs => (
     is      => 'ro',
@@ -24,11 +74,28 @@ has max_procs => (
     default => \&cpu_count,
 );
 
+=head2 max_reqs
+
+The maximum number of tasks a worker process may run before being terminated
+and replaced with a fresh process. This is useful for tasks that might leak
+memory over time.
+
+=cut
+
 has max_reqs => (
     is      => 'ro',
     isa     => Int,
     default => 0,
 );
+
+=head1 PRIVATE ATTRIBUTES
+
+=head2 procs_lock
+
+Semaphore used to control access to the worker processes. Starts incremented
+to the number of processes (C<max_procs>).
+
+=cut
 
 has procs_lock => (
     is      => 'lazy',
@@ -40,17 +107,35 @@ sub _build_procs_lock {
     return Coro::Semaphore->new($self->max_procs);
 }
 
+=head2 num_procs
+
+Running total of processes that are currently running.
+
+=cut
+
 has num_procs => (
     is      => 'rw',
     isa     => Int,
     default => 0,
 );
 
+=head2 procs
+
+Array holding the L<Coro::Process> objects.
+
+=cut
+
 has procs => (
     is      => 'ro',
     isa     => ArrayRef[InstanceOf['Coro::Process']],
     default => sub { [] },
 );
+
+=head2 inbox
+
+L<Coro::Channel> instanced used to queue tasks from the C<queue> method.
+
+=cut
 
 has inbox => (
     is      => 'lazy',
@@ -61,6 +146,12 @@ sub _build_inbox {
   my $self = shift;
   return Coro::Channel->new($self->max_procs);
 }
+
+=head2 inbox_worker
+
+L<Coro> thread monitoring the C<inbox>.
+
+=cut
 
 has inbox_worker => (
     is  => 'lazy',
@@ -95,11 +186,22 @@ sub _build_inbox_worker {
     } @_;
 }
 
+=head2 is_running
+
+Boolean which signals to the instance that the C<shutdown> method has been
+called.
+
+=cut
+
 has is_running => (
     is      => 'rw',
     isa     => Bool,
     default => 1,
 );
+
+=head1 METHODS
+
+=cut
 
 sub DEMOLISH {
     my $self = shift;
@@ -109,26 +211,6 @@ sub DEMOLISH {
 sub BUILD {
     my $self = shift;
     $self->inbox_worker; # ensure the worker starts
-}
-
-sub capacity {
-    my $self = shift;
-    return scalar(@{$self->procs});
-}
-
-sub shutdown {
-    my $self = shift;
-
-    $self->is_running(0);
-
-    $self->inbox->shutdown;
-    $self->inbox_worker->join;
-
-    my $count = $self->num_procs or return;
-    for (1 .. $count) {
-        my $proc = shift @{$self->procs};
-        $self->kill_proc($proc);
-    }
 }
 
 sub start_proc {
@@ -170,109 +252,39 @@ sub checkout_proc {
     return $proc;
 }
 
-sub process {
-    my ($self, $f, $args) = @_;
+=head2 capacity
 
-    my $guard = $self->procs_lock->guard;
+Returns the number of free worker processes.
 
-    my $proc = $self->checkout_proc;
-    scope_guard { $self->checkin_proc($proc) };
+=cut
 
-    my $msgid = $proc->send($f, $args);
-    return $proc->recv($msgid);
-}
-
-sub map {
-    my ($self, $f, @args) = @_;
-    my @deferred = map { $self->defer($f, [$_]) } @args;
-    return map { $_->() } @deferred;
-}
-
-sub defer {
+sub capacity {
     my $self = shift;
-    my $cv   = AnyEvent->condvar;
-
-    async_pool {
-        my ($self, $cv, @args) = @_;
-        my $result = eval { $self->process(@args) };
-        $cv->croak($@) if $@;
-        $cv->send($result);
-    } $self, $cv, @_;
-
-    return sub { $cv->recv };
+    return scalar(@{$self->procs});
 }
 
-sub queue {
-    my ($self, $f, $args, $on_success, $on_error) = @_;
-    $self->inbox->put([$f, $args, $on_success, $on_error]);
+=head2 shutdown
+
+Shuts down all processes and resets state on the process pool. After calling
+this method, the pool is effectively in a new state and may be used normally.
+
+=cut
+
+sub shutdown {
+    my $self = shift;
+
+    $self->is_running(0);
+
+    $self->inbox->shutdown;
+    $self->inbox_worker->join;
+
+    my $count = $self->num_procs or return;
+    for (1 .. $count) {
+        my $proc = shift @{$self->procs};
+        $proc->shutdown(5);
+        --$self->{num_procs};
+    }
 }
-
-1;
-__END__
-
-=head1 NAME
-
-Coro::ProcessPool - an asynchronous process pool
-
-=head1 SYNOPSIS
-
-    use Coro::ProcessPool;
-
-    my $pool = Coro::ProcessPool->new(
-        max_procs => 4,
-        max_reqs  => 100,
-    );
-
-    my $double = sub { $_[0] * 2 };
-
-    # Process in sequence
-    my %result;
-    foreach my $i (1 .. 1000) {
-        $result{$i} = $pool->process($double, [$i]);
-    }
-
-    # Process as a batch
-    my @results = $pool->map($double, 1 .. 1000);
-
-    # Defer waiting for result
-    my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
-    foreach my $i (keys %deferred) {
-        print "$i = " . $deferred{$i}->() . "\n";
-    }
-
-    # Use a "task class", implementing 'new' and 'run'
-    my $result = $pool->process('Task::Doubler', 21);
-
-    $pool->shutdown;
-
-=head1 DESCRIPTION
-
-Processes tasks using a pool of external Perl processes.
-
-=head1 METHODS
-
-=head2 new
-
-Creates a new process pool. Processes will be spawned as needed.
-
-=over
-
-=item max_procs
-
-This is the maximum number of child processes to maintain. If all processes are
-busy handling tasks, further calls to L<./process> will yield until a process
-becomes available. If not specified, defaults to the number of CPUs on the
-system.
-
-=item max_reqs
-
-If this is a positive number (defaults to 0), child processes will be
-terminated and replaced after handling C<max_reqs> tasks. Choosing the correct
-value for C<max_reqs> is a tradeoff between the need to clear memory leaks in
-the child process and the time it takes to spawn a new process and import any
-packages used by client code.
-
-=back
 
 =head2 process($f, $args)
 
@@ -290,6 +302,20 @@ busy, this method will block until one becomes available. Processes are spawned
 as needed, up to C<max_procs>, from this method. Also note that the use of
 C<max_reqs> can cause this method to yield while a new process is spawned.
 
+=cut
+
+sub process {
+    my ($self, $f, $args) = @_;
+
+    my $guard = $self->procs_lock->guard;
+
+    my $proc = $self->checkout_proc;
+    scope_guard { $self->checkin_proc($proc) };
+
+    my $msgid = $proc->send($f, $args);
+    return $proc->recv($msgid);
+}
+
 =head2 map($f, @args)
 
 Applies C<$f> to each value in C<@args> in turn and returns a list of the
@@ -298,6 +324,14 @@ guaranteed, the results are guaranteed to be in the same order as C<@args>,
 even if the result of calling C<$f> returns a list itself (in which case, the
 results of that calcuation is flattened into the list returned by C<map>.
 
+=cut
+
+sub map {
+    my ($self, $f, @args) = @_;
+    my @deferred = map { $self->defer($f, [$_]) } @args;
+    return map { $_->() } @deferred;
+}
+
 =head2 defer($f, $args)
 
 Similar to L<./process>, but returns immediately. The return value is a code
@@ -305,6 +339,22 @@ reference that, when called, returns the results of calling C<$f->(@$args)>.
 
     my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
     my $result   = $deferred->();
+
+=cut
+
+sub defer {
+    my $self = shift;
+    my $cv   = AnyEvent->condvar;
+
+    async_pool {
+        my ($self, $cv, @args) = @_;
+        my $result = eval { $self->process(@args) };
+        $cv->croak($@) if $@;
+        $cv->send($result);
+    } $self, $cv, @_;
+
+    return sub { $cv->recv };
+}
 
 =head2 queue($f, $args, $callback)
 
@@ -330,10 +380,14 @@ variable.
     $pool->queue($doubler_function, [21], make_callback(21));
     $cv->recv;
 
-=head2 shutdown
+=cut
 
-Shuts down all processes and resets state on the process pool. After calling
-this method, the pool is effectively in a new state and may be used normally.
+sub queue {
+    my ($self, $f, $args, $on_success, $on_error) = @_;
+    $self->inbox->put([$f, $args, $on_success, $on_error]);
+}
+
+=back
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
 
@@ -439,8 +493,6 @@ process pool on Windows:
 
 =item L<Win32::Pipe>
 
-=back
-
 =head1 AUTHOR
 
 Jeff Ober <jeffober@gmail.com>
@@ -448,3 +500,7 @@ Jeff Ober <jeffober@gmail.com>
 =head1 LICENSE
 
 BSD License
+
+=cut
+
+1;

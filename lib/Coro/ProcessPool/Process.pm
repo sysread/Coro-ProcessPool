@@ -192,7 +192,6 @@ sub join {
 
 sub kill_process {
     my ($self, $timeout) = @_;
-    $timeout ||= $DEFAULT_KILL_TIMEOUT;
 
     return unless $self->is_running;
 
@@ -200,15 +199,15 @@ sub kill_process {
     my $reply = $self->recv($id);
     $self->child_out->close;
 
-    until ($self->join($timeout)) {
+    until ($self->join) {
         kill('KILL', $self->pid);
     }
 }
 
 sub shutdown {
-    my $self = shift;
+    my ($self, $timeout) = @_;
     my $pid = $self->pid;
-    $self->kill_process;
+    $self->kill_process($timeout);
     $self->cleanup;
     return 1;
 }
