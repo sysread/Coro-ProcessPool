@@ -2,28 +2,111 @@ package Coro::ProcessPool::Worker;
 
 use Moo;
 use Types::Standard qw(-types);
+use AnyEvent;
+use Carp;
+use Coro;
+use Coro::Handle;
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
+
+has queue => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
+
+has input => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Handle'],
+    default => sub { unblock(*STDIN) },
+);
+
+has input_monitor => (
+    is  => 'lazy',
+    isa => InstanceOf['Coro'],
+);
+
+sub _build_input_monitor {
+    return async {
+        my $self = shift;
+
+        eval {
+            while (my $line = $self->input->readline($EOL)) {
+                my $data = decode($line);
+                my ($id, $task) = @$data;
+                $self->queue->put([$id, $task]);
+            }
+        };
+
+        return if $@ && $@ =~ /shutting down/;
+        $self->shutdown;
+    } @_;
+}
+
+has completed => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Channel'],
+    default => sub { Coro::Channel->new() },
+);
+
+has output => (
+    is      => 'ro',
+    isa     => InstanceOf['Coro::Handle'],
+    default => sub { unblock(*STDOUT) },
+);
+
+has output_monitor => (
+    is  => 'lazy',
+    isa => InstanceOf['Coro'],
+);
+
+sub _build_output_monitor {
+    return async {
+        my $self = shift;
+
+        eval {
+            while (my $result = $self->completed->get) {
+                $self->output->print(encode($result) . $EOL);
+            }
+        };
+    } @_;
+}
 
 sub run {
     my $self = shift;
 
-    $| = 1;
+    $SIG{KILL} = sub { exit };
+    $SIG{TERM} = sub { exit };
+    $SIG{HUP}  = sub { exit };
 
-    while (my $line = <STDIN>) {
-        my $data = decode($line);
-        my ($id, $task) = @$data;
+    while (1) {
+        my $job = $self->queue->get or last;
+        my ($id, $task) = @$job;
 
-        if ($task eq 'SHUTDOWN') {
-            print(encode([$id, [0, 'OK']]) . $EOL);
-            last;
+        if (!ref($task) && $task eq 'SHUTDOWN') {
+            $self->completed->put([$id, [0, 'OK']]);
+            $self->shutdown;
+            next;
         }
 
         my $reply = $self->process_task($task);
-        print(encode([$id, $reply]) . $EOL);
+        $self->completed->put([$id, $reply]);
     }
 
-    exit 0;
+    $self->completed->shutdown;
+    $self->output_monitor->join;
+}
+
+before run => sub {
+    my $self = shift;
+    $self->input_monitor;
+    $self->output_monitor;
+};
+
+sub shutdown {
+    my $self = shift;
+    $self->queue->shutdown;
+    $self->input_monitor->throw('shutting down');;
 }
 
 sub process_task {
