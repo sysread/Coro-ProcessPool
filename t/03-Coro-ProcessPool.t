@@ -71,46 +71,6 @@ SKIP: {
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
-    note 'max reqs';
-    {
-        my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
-
-        # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
-        # next proc and ensure it's not the same one.
-        {
-            my $pid;
-            {
-                my $proc = $pool->checkout_proc;
-                $pid = $proc->pid;
-                ++$proc->{messages_sent};
-                $pool->checkin_proc($proc);
-            }
-
-            # Check out new proc and verify it has a new pid
-            my $proc = $pool->checkout_proc;
-            ok($pid != $proc->pid, 'max_reqs correctly spawns new processes');
-            $pool->checkin_proc($proc);
-        }
-
-        # Verify that it doesn't happen when messages_sent isn't fudged.
-        {
-            my $pid;
-            {
-                my $proc = $pool->checkout_proc;
-                $pid = $proc->pid;
-                $pool->checkin_proc($proc);
-            }
-
-            # Check out new proc and verify it has a new pid
-            my $proc = $pool->checkout_proc;
-            is($pid, $proc->pid, 'max_reqs does not respawn when unnecessary');
-            $pool->checkin_proc($proc);
-        }
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
-    };
-
     note 'process';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
@@ -204,6 +164,46 @@ SKIP: {
 
         foreach my $i (1 .. $count) {
             is($result{$i}, $i * 2, 'expected result');
+        }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+    };
+
+    note 'max reqs';
+    {
+        my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
+
+        # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
+        # next proc and ensure it's not the same one.
+        {
+            my $pid;
+            {
+                my $proc = $pool->checkout_proc;
+                $pid = $proc->pid;
+                ++$proc->{messages_sent};
+                $pool->checkin_proc($proc);
+            }
+
+            # Check out new proc and verify it has a new pid
+            my $proc = $pool->checkout_proc;
+            ok($pid != $proc->pid, 'max_reqs correctly spawns new processes');
+            $pool->checkin_proc($proc);
+        }
+
+        # Verify that it doesn't happen when messages_sent isn't fudged.
+        {
+            my $pid;
+            {
+                my $proc = $pool->checkout_proc;
+                $pid = $proc->pid;
+                $pool->checkin_proc($proc);
+            }
+
+            # Check out new proc and verify it has a new pid
+            my $proc = $pool->checkout_proc;
+            is($pid, $proc->pid, 'max_reqs does not respawn when unnecessary');
+            $pool->checkin_proc($proc);
         }
 
         $pool->shutdown;
