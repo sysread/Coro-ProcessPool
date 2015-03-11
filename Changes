@@ -1,3 +1,8 @@
+0.20    2015-03-11
+    * Fixed bug causing processes to hang when shutting down
+    * Better integration tests
+    * Removed queue() method; it was redundant
+
 0.19    2015-03-10
     * More refactoring of workflow
     * Classes now use Moo

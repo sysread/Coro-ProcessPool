@@ -53,7 +53,7 @@ use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
