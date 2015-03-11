@@ -222,7 +222,7 @@ sub start_proc {
 
 sub kill_proc {
     my ($self, $proc) = @_;
-    async_pool { $proc->shutdown };
+    $proc->shutdown;
     --$self->{num_procs};
 }
 

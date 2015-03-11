@@ -36,17 +36,18 @@ SKIP: {
         my $worker = new_ok($class);
         my $cv = AnyEvent->condvar;
 
-        my $worker_thread = async {
-            $worker->run;
-            $cv->send(1);
-        };
-
         my $timer = async {
             Coro::AnyEvent::sleep 1;
             $worker->shutdown;
 
             Coro::AnyEvent::idle_upto 3;
             $cv->send(0);
+        };
+
+        my $worker_thread = async {
+            $worker->run;
+            $cv->send(1);
+            $timer->cancel;
         };
 
         my $is_dead = $cv->recv;

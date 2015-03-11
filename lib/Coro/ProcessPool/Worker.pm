@@ -3,6 +3,7 @@ package Coro::ProcessPool::Worker;
 use Moo;
 use Types::Standard qw(-types);
 use AnyEvent;
+use Carp;
 use Coro;
 use Coro::Handle;
 use Coro::ProcessPool::Util qw($EOL decode encode);
@@ -68,18 +69,15 @@ sub _build_output_monitor {
                 $self->output->print(encode($result) . $EOL);
             }
         };
-
-        return if $@ && $@ =~ /shutting down/;
-        $self->shutdown;
     } @_;
 }
 
 sub run {
     my $self = shift;
 
-    $SIG{KILL} = sub { $self->shutdown };
-    $SIG{TERM} = sub { $self->shutdown };
-    $SIG{HUP}  = sub { $self->shutdown };
+    $SIG{KILL} = sub { exit };
+    $SIG{TERM} = sub { exit };
+    $SIG{HUP}  = sub { exit };
 
     while (1) {
         my $job = $self->queue->get or last;
@@ -97,6 +95,8 @@ sub run {
 
     $self->completed->shutdown;
     $self->output_monitor->join;
+
+warn "SHUT DOWN!\n";
 }
 
 before run => sub {
