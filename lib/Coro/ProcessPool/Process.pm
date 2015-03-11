@@ -32,6 +32,8 @@ sub BUILDARGS {
     my $exec = "$cmd $args";
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 
+    $SIG{CHLD} = 'IGNORE';
+
     $args{pid}       = $pid;
     $args{child_in}  = unblock $r;
     $args{child_out} = unblock $w;
