@@ -37,50 +37,35 @@ diag 'start & stop';
 #    subtest 'checkout_proc' => sub {
 diag 'checkout_proc';
     {
-        my $count = 2;
-        my $pool  = new_ok($class, [max_procs => $count])
+        my $pool  = new_ok($class, [max_procs => 1])
             or BAIL_OUT 'Failed to create class';
 
-        my @procs;
+        # Checkout before process started
+        my $proc = $pool->checkout_proc;
 
-        foreach my $i (1 .. $pool->max_procs) {
-            my $proc = $pool->checkout_proc;
+        ok(defined $proc, 'new process spawned and acquired');
+        isa_ok($proc, 'Coro::ProcessPool::Process');
+        ok(defined $proc->pid, 'new process has a pid');
 
-            ok(defined $proc, 'new process spawned and acquired');
-            isa_ok($proc, 'Coro::ProcessPool::Process');
-            ok(defined $proc->pid, 'new process has a pid');
+        is($pool->num_procs, 1, 'process count correct');
+        is($pool->capacity, 0, 'capacity correct');
 
-            is($pool->num_procs, $i, 'process count correct');
-            is($pool->capacity, 0, 'capacity correct');
+        $pool->checkin_proc($proc);
+        is($pool->capacity, 1, 'capacity correct');
+        is($pool->num_procs, 1, 'correct process count');
 
-            push @procs, $proc;
-        }
+        # Checkout after process started
+        $proc = $pool->checkout_proc;
+        is($pool->capacity, 0, 'correct capacity');
+        is($pool->num_procs, 1, 'correct process count');
 
-        my $i = 0;
-        foreach my $proc (@procs) {
-            $pool->checkin_proc($proc);
-            is($pool->capacity, ++$i, 'capacity correct');
-        }
+        ok(defined $proc, 'previously spawned process acquired');
+        isa_ok($proc, 'Coro::ProcessPool::Process');
 
-        is($pool->capacity, $count, 'correct pool capacity after all procs checked in');
+        $pool->checkin_proc($proc);
+        is($pool->capacity, 1, 'correct pool capacity after all procs checked in');
 
-        {
-            is($pool->capacity, $count, 'correct capacity');
-            is($pool->num_procs, $count, 'correct process count');
-
-            my $proc = $pool->checkout_proc;
-
-            is($pool->capacity, $count - 1, 'correct capacity');
-            is($pool->num_procs, $count, 'correct process count');
-
-            ok(defined $proc, 'previously spawned process acquired');
-            isa_ok($proc, 'Coro::ProcessPool::Process');
-
-            $pool->checkin_proc($proc);
-        }
-
-        is($pool->capacity, $count, 'correct pool capacity after all procs checked in');
-
+        # Shutdown
         $pool->shutdown;
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
 
@@ -132,7 +117,7 @@ diag 'max reqs';
     #subtest 'process' => sub {
 diag 'process';
     {
-        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
         my %result;
@@ -149,7 +134,7 @@ diag 'process';
     #subtest 'defer' => sub {
 diag 'defer';
     {
-        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
         my %result;
@@ -169,7 +154,7 @@ diag 'defer';
     #subtest 'map' => sub {
 diag 'map';
     {
-        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my @numbers  = 1 .. 100;
         my @expected = map { $_ * 2 } @numbers;
@@ -202,7 +187,7 @@ diag 'fail';
     #subtest 'queue' => sub {
 diag 'queue';
     {
-        my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
+        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my $count = 100;
         my $done  = AnyEvent->condvar;
