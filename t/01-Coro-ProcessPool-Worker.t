@@ -1,8 +1,6 @@
 use strict;
 use warnings;
-use Test::More;
-use Coro;
-use Coro::AnyEvent;
+use Test::More qw(no_plan);
 
 BEGIN { use AnyEvent::Impl::Perl }
 
@@ -31,5 +29,3 @@ SKIP: {
         is_deeply($result, [0, 42], 'class-based task produces expected result');
     };
 };
-
-done_testing;

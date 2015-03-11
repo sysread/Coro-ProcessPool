@@ -98,8 +98,8 @@ to the number of processes (C<max_procs>).
 =cut
 
 has procs_lock => (
-    is      => 'lazy',
-    isa     => InstanceOf['Coro::Semaphore'],
+    is  => 'lazy',
+    isa => InstanceOf['Coro::Semaphore'],
 );
 
 sub _build_procs_lock {

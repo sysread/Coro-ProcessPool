@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More;
+use Test::More qw(no_plan);
 use Coro;
 use List::Util qw(shuffle);
 
@@ -67,5 +67,3 @@ SKIP: {
         $proc->shutdown($timeout);
     };
 };
-
-done_testing;

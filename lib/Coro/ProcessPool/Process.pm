@@ -32,8 +32,6 @@ sub BUILDARGS {
     my $exec = "$cmd $args";
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 
-    $SIG{CHLD} = 'IGNORE';
-
     $args{pid}       = $pid;
     $args{child_in}  = unblock $r;
     $args{child_out} = unblock $w;
@@ -132,6 +130,7 @@ sub _build_child_err_watcher {
         my $self = shift;
         while (my $line = $self->child_err->readline($EOL)) {
             warn sprintf("(WORKER PID %s) %s", ($self->pid || '(DEAD)'), $line);
+            last unless $self->pid;
         }
     } @_;
 }
@@ -152,8 +151,8 @@ sub cleanup {
     }
 
     if ($self->child_err) {
-        $self->child_err->close;
         $self->child_err_watcher->join;
+        $self->child_err->close;
         $self->clear_child_err_watcher;
         $self->clear_child_err;
     }
@@ -186,6 +185,8 @@ sub kill_process {
 
     return unless $self->is_running;
 
+    local $SIG{CHLD} = 'IGNORE';
+
     my $id = $self->write('SHUTDOWN');
     my $reply = $self->recv($id);
     $self->child_out->close;
@@ -198,6 +199,7 @@ sub kill_process {
 
 sub shutdown {
     my ($self, $timeout) = @_;
+    return unless $self->pid;
     $self->kill_process($timeout);
     $self->cleanup;
     return 1;

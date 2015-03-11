@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More;
+use Test::More qw(no_plan);
 
 my $class = 'Coro::ProcessPool::Util';
 
@@ -31,5 +31,3 @@ SKIP: {
         is($f->($n), 42, 'CODE and param list preserved');
     }
 };
-
-done_testing;
