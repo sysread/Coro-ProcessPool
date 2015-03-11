@@ -175,6 +175,7 @@ sub join {
 
     while ($pid > 0) {
         $pid = waitpid($pid, WNOHANG);
+warn "# WAITPID = $pid\n";
         Coro::AnyEvent::sleep($DEFAULT_WAITPID_INTERVAL)
           if $pid > 0;
 
@@ -201,12 +202,12 @@ sub kill_process {
 
     until ($self->join($timeout)) {
         kill('KILL', $self->pid);
+        waitpid($self->pid, 0);
     }
 }
 
 sub shutdown {
     my ($self, $timeout) = @_;
-    my $pid = $self->pid;
     $self->kill_process($timeout);
     $self->cleanup;
     return 1;
