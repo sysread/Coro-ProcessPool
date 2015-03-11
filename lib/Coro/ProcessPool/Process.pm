@@ -96,12 +96,6 @@ has inbox => (
     default  => sub { {} },
 );
 
-has on_read => (
-    is      => 'rw',
-    isa     => Maybe[CodeRef],
-    clearer => 'clear_on_read',
-);
-
 has child_in_watcher => (
     is       => 'lazy',
     isa      => InstanceOf['Coro'],
@@ -114,12 +108,7 @@ sub _build_child_in_watcher {
         my $self = shift;
 
         while (my $line = $self->child_in->readline($EOL)) {
-            if ($self->on_read) {
-                $self->on_read->();
-                $self->clear_on_read;
-            }
-
-            my $msg  = decode($line);
+            my $msg = decode($line);
             my ($id, $data) = @$msg;
 
             if (exists $self->inbox->{$id}) {

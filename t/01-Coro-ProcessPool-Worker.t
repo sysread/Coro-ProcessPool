@@ -30,29 +30,6 @@ SKIP: {
         my $result = $class->process_task(['t::TestTask', []]);
         is_deeply($result, [0, 42], 'class-based task produces expected result');
     };
-
-    note 'shutdown';
-    {
-        my $worker = new_ok($class);
-        my $cv = AnyEvent->condvar;
-
-        my $timer = async {
-            Coro::AnyEvent::sleep 1;
-            $worker->shutdown;
-
-            Coro::AnyEvent::idle_upto 3;
-            $cv->send(0);
-        };
-
-        my $worker_thread = async {
-            $worker->run;
-            $cv->send(1);
-            $timer->cancel;
-        };
-
-        my $is_dead = $cv->recv;
-        is($is_dead, 1, 'shutdown terminates worker');
-    };
 };
 
 done_testing;

@@ -131,61 +131,6 @@ has procs => (
     default => sub { [] },
 );
 
-=head2 inbox
-
-L<Coro::Channel> instanced used to queue tasks from the C<queue> method.
-
-=cut
-
-has inbox => (
-    is      => 'lazy',
-    isa     => InstanceOf['Coro::Channel'],
-);
-
-sub _build_inbox {
-  my $self = shift;
-  return Coro::Channel->new($self->max_procs);
-}
-
-=head2 inbox_worker
-
-L<Coro> thread monitoring the C<inbox>.
-
-=cut
-
-has inbox_worker => (
-    is  => 'lazy',
-    isa => InstanceOf['Coro'],
-);
-
-sub _build_inbox_worker {
-    async {
-        my $self = shift;
-
-        while (1) {
-            my $task = $self->inbox->get or last;
-            my ($f, $args, $on_success, $on_error) = @$task;
-
-            async_pool {
-                my ($self, $on_success, $on_error) = @_;
-                my $result = eval { $self->process($f, $args) };
-
-                if ($@) {
-                    my $error = $@;
-                    if (ref $on_error && ref $on_error eq 'CODE') {
-                        $on_error->($error);
-                    }
-                }
-                else {
-                    if (ref $on_success && ref $on_success eq 'CODE') {
-                        $on_success->($result);
-                    }
-                }
-            } $self, $on_success, $on_error;
-        }
-    } @_;
-}
-
 =head2 is_running
 
 Boolean which signals to the instance that the C<shutdown> method has been
@@ -206,11 +151,6 @@ has is_running => (
 sub DEMOLISH {
     my $self = shift;
     $self->shutdown;
-}
-
-sub BUILD {
-    my $self = shift;
-    $self->inbox_worker; # ensure the worker starts
 }
 
 sub start_proc {
@@ -275,9 +215,6 @@ sub shutdown {
 
     $self->is_running(0);
 
-    $self->inbox->shutdown;
-    $self->inbox_worker->join;
-
     my $count = $self->num_procs or return;
     for (1 .. $count) {
         my $proc = shift @{$self->procs};
@@ -306,10 +243,8 @@ C<max_reqs> can cause this method to yield while a new process is spawned.
 
 sub process {
     my ($self, $f, $args) = @_;
-
     my $guard = $self->procs_lock->guard;
-
-    my $proc = $self->checkout_proc;
+    my $proc  = $self->checkout_proc;
     scope_guard { $self->checkin_proc($proc) };
 
     my $msgid = $proc->send($f, $args);
@@ -355,39 +290,6 @@ sub defer {
 
     return sub { $cv->recv };
 }
-
-=head2 queue($f, $args, $callback)
-
-Queues the execution of C<$f->(@$args)> and returns immediately. If
-C<$callback> is specified and is a code ref, it will be called with the result
-of the executed code once the task is processed. Note that the callback is not
-provided with any identifying information about the task being executed. That
-is the responsibility of the caller. It is also the caller's responsibility to
-coordinate any code that depends on the result, for example using a condition
-variable.
-
-    my $cv = AnyEvent->condvar;
-
-    sub make_callback {
-        my $n = shift;
-        return sub {
-            my $result = shift;
-            print "2 * $n = $result\n";
-            $cv->send;
-        }
-    }
-
-    $pool->queue($doubler_function, [21], make_callback(21));
-    $cv->recv;
-
-=cut
-
-sub queue {
-    my ($self, $f, $args, $on_success, $on_error) = @_;
-    $self->inbox->put([$f, $args, $on_success, $on_error]);
-}
-
-=back
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
 
@@ -492,6 +394,8 @@ process pool on Windows:
 =item L<Win32::IPC>
 
 =item L<Win32::Pipe>
+
+=back
 
 =head1 AUTHOR
 

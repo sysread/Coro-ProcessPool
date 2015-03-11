@@ -9,6 +9,7 @@ use Coro::Handle;
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
 
+=cut
 has queue => (
     is      => 'ro',
     isa     => InstanceOf['Coro::Channel'],
@@ -107,6 +108,28 @@ sub shutdown {
     my $self = shift;
     $self->queue->shutdown;
     $self->input_monitor->throw('shutting down');;
+}
+=cut
+
+sub run {
+    my $self = shift;
+
+    $| = 1;
+
+    while (my $line = <STDIN>) {
+        my $data = decode($line);
+        my ($id, $task) = @$data;
+
+        if ($task eq 'SHUTDOWN') {
+            print(encode([$id, [0, 'OK']]) . $EOL);
+            last;
+        }
+
+        my $reply = $self->process_task($task);
+        print(encode([$id, $reply]) . $EOL);
+    }
+
+    exit 0;
 }
 
 sub process_task {
