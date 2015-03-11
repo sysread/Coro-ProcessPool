@@ -50,7 +50,7 @@ use Coro;
 use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
 use Coro::ProcessPool::Process;
-use Coro::ProcessPool::Util qw(cpu_count);
+use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 
 our $VERSION = '0.19';
@@ -71,7 +71,7 @@ to the number of CPUs on the ssytem.
 has max_procs => (
     is      => 'ro',
     isa     => Int,
-    default => \&cpu_count,
+    default => sub { Coro::ProcessPool::Util::cpu_count() },
 );
 
 =head2 max_reqs
@@ -153,6 +153,13 @@ sub DEMOLISH {
     $self->shutdown;
 }
 
+sub BUILD {
+    my $self = shift;
+    for (1 .. $self->max_procs) {
+      $self->checkin_proc($self->start_proc);
+    }
+}
+
 sub start_proc {
     my $self = shift;
     my $proc = Coro::ProcessPool::Process->new();
@@ -171,6 +178,7 @@ sub checkin_proc {
 
     if (!$self->is_running || ($self->max_reqs && $proc->messages_sent >= $self->max_reqs)) {
         $self->kill_proc($proc);
+        unshift @{$self->procs}, $self->start_proc;
     } else {
         unshift @{$self->procs}, $proc;
     }

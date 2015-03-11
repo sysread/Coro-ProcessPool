@@ -7,7 +7,7 @@ use Coro::AnyEvent;
 use Test::More qw(no_plan);
 use Guard;
 use Coro::Channel;
-use Coro::ProcessPool::Util qw(cpu_count);
+use Sub::Override;
 
 BEGIN { use AnyEvent::Impl::Perl }
 
@@ -25,7 +25,8 @@ SKIP: {
 
     note 'start & stop';
     {
-        my $cpus = cpu_count();
+        my $cpus     = 1;
+        my $override = Sub::Override->new('Coro::ProcessPool::Util::cpu_count' => sub { $cpus });
         my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
         is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
         $pool->shutdown;

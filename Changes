@@ -3,6 +3,7 @@
     * Classes now use Moo
     * Deprecated Coro::ProcessPool::Mailbox
     * Better handling of child processes
+    * ProcessPool now starts processes immediately
 
 0.18    2015-03-04
     * Fixed ugly bug where pool did not automatically shut down
