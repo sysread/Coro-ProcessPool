@@ -6,7 +6,6 @@ use Coro;
 use Coro::AnyEvent;
 use Test::More;
 use Guard;
-use Test::TinyMocker;
 use Coro::Channel;
 use Coro::ProcessPool::Util qw(cpu_count);
 
