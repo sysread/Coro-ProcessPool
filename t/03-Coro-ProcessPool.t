@@ -24,7 +24,8 @@ SKIP: {
 
     use_ok($class) or BAIL_OUT;
 
-    subtest 'start & stop' => sub {
+#    subtest 'start & stop' => sub {
+    {
         my $cpus = cpu_count();
         my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
         is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
@@ -32,7 +33,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'checkout_proc' => sub {
+#    subtest 'checkout_proc' => sub {
+    {
         my $count = 2;
         my $pool  = new_ok($class, [max_procs => $count])
             or BAIL_OUT 'Failed to create class';
@@ -84,7 +86,8 @@ SKIP: {
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
-    subtest 'max reqs' => sub {
+    #subtest 'max reqs' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
 
         # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
@@ -123,7 +126,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'process' => sub {
+    #subtest 'process' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
@@ -138,7 +142,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'defer' => sub {
+    #subtest 'defer' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 20;
@@ -156,7 +161,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'map' => sub {
+    #subtest 'map' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my @numbers  = 1 .. 100;
@@ -168,7 +174,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'fail' => sub {
+    #subtest 'fail' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
         my $croaker = sub {
@@ -185,7 +192,8 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    subtest 'queue' => sub {
+    #subtest 'queue' => sub {
+    {
         my $pool = new_ok($class, [max_procs => 2]) or BAIL_OUT 'Failed to create class';
 
         my $count = 100;

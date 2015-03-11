@@ -6,6 +6,7 @@ use List::Util qw(shuffle);
 
 BEGIN { use AnyEvent::Impl::Perl }
 
+my $timeout = 3;
 my $class = 'Coro::ProcessPool::Process';
 
 sub test_sub {
@@ -24,7 +25,7 @@ SKIP: {
         ok(my $pid = $proc->pid, 'spawned correctly');
 
         ok(my $id = $proc->send(\&test_sub, [21]), 'final send');
-        ok($proc->shutdown, 'shutdown with pending task');
+        ok($proc->shutdown($timeout), 'shutdown with pending task');
         ok(my $reply = $proc->recv($id), 'reply received after termination');
         is($reply, 42, 'received expected result');
     };
@@ -41,7 +42,7 @@ SKIP: {
             is($proc->messages_sent, ++$count, "message count tracking ($i)");
         }
 
-        $proc->shutdown;
+        $proc->shutdown($timeout);
     };
 
     subtest 'out of order' => sub {
@@ -60,7 +61,7 @@ SKIP: {
             is($reply, $i * 2, "ooo receives expected result ($i)");
         }
 
-        $proc->shutdown;
+        $proc->shutdown($timeout);
     };
 };
 
