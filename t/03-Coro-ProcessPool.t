@@ -24,7 +24,7 @@ SKIP: {
 
     use_ok($class) or BAIL_OUT;
 
-    diag 'start & stop';
+    note 'start & stop';
     {
         my $cpus = cpu_count();
         my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
@@ -33,7 +33,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'checkout_proc';
+    note 'checkout_proc';
     {
         my $pool  = new_ok($class, [max_procs => 1])
             or BAIL_OUT 'Failed to create class';
@@ -71,7 +71,7 @@ SKIP: {
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
-    diag 'max reqs';
+    note 'max reqs';
     {
         my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -111,7 +111,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'process';
+    note 'process';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -127,7 +127,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'defer';
+    note 'defer';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -146,7 +146,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'map';
+    note 'map';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -159,7 +159,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'task errors';
+    note 'task errors';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -177,7 +177,7 @@ SKIP: {
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    diag 'queue';
+    note 'queue';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 

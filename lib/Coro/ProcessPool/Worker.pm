@@ -95,8 +95,6 @@ sub run {
 
     $self->completed->shutdown;
     $self->output_monitor->join;
-
-warn "SHUT DOWN!\n";
 }
 
 before run => sub {
@@ -107,7 +105,6 @@ before run => sub {
 
 sub shutdown {
     my $self = shift;
-warn "SHUTTING DOWN\n";
     $self->queue->shutdown;
     $self->input_monitor->throw('shutting down');;
 }

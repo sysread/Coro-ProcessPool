@@ -177,7 +177,6 @@ sub join {
 
     while ($pid > 0) {
         $pid = waitpid($pid, WNOHANG);
-warn "# WAITPID = $pid\n";
         Coro::AnyEvent::sleep($DEFAULT_WAITPID_INTERVAL)
           if $pid > 0;
 

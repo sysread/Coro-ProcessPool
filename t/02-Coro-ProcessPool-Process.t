@@ -20,7 +20,7 @@ SKIP: {
     use_ok($class) or BAIL_OUT;
     my @range = (1 .. 20);
 
-    diag 'shutdown';
+    note 'shutdown';
     {
         my $proc = new_ok($class);
         ok(my $pid = $proc->pid, 'spawned correctly');
@@ -31,7 +31,7 @@ SKIP: {
         is($reply, 42, 'received expected result');
     };
 
-    diag 'in order';
+    note 'in order';
     {
         my $proc = new_ok($class);
         ok(my $pid = $proc->pid, 'spawned correctly');
@@ -47,7 +47,7 @@ SKIP: {
         $proc->shutdown($timeout);
     };
 
-    diag 'out of order';
+    note 'out of order';
     {
         my $proc = new_ok($class);
         ok(my $pid = $proc->pid, 'spawned correctly');
