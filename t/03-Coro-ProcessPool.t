@@ -164,9 +164,6 @@ SKIP: {
             }
         }
 
-        note 'sleeping...';
-        sleep 5;
-
         $pool2->shutdown;
         is($pool2->{num_procs}, 0, 'no processes after shutdown');
     }
