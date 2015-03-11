@@ -1,7 +1,8 @@
-0.19    ????-??-??
+0.19    2015-03-10
     * More refactoring of workflow
     * Classes now use Moo
     * Deprecated Coro::ProcessPool::Mailbox
+    * Better handling of child processes
 
 0.18    2015-03-04
     * Fixed ugly bug where pool did not automatically shut down
