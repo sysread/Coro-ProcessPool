@@ -35,7 +35,7 @@ SKIP: {
 
     note 'checkout_proc';
     {
-        my $pool  = new_ok($class, [max_procs => 1])
+        my $pool = new_ok($class, [max_procs => 1])
             or BAIL_OUT 'Failed to create class';
 
         # Checkout before process started
@@ -71,10 +71,11 @@ SKIP: {
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
+    my $pool = new_ok($class, [max_procs => 2])
+        or BAIL_OUT 'Failed to create class';
+
     note 'process';
     {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
         my $count = 20;
         my %result;
 
@@ -82,15 +83,10 @@ SKIP: {
             my $result = $pool->process($doubler, [ $i ]);
             is($result, $i * 2, 'expected result');
         }
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     note 'defer';
     {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
         my $count = 20;
         my %result;
 
@@ -101,28 +97,18 @@ SKIP: {
         foreach my $i (1 .. $count) {
             is($result{$i}->(), $i * 2, 'expected result');
         }
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     note 'map';
     {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
         my @numbers  = 1 .. 100;
         my @expected = map { $_ * 2 } @numbers;
         my @actual   = $pool->map($doubler, @numbers);
         is_deeply(\@actual, \@expected, 'expected result');
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     note 'task errors';
     {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
         my $croaker = sub {
             my ($x) = @_;
             return $x / 0;
@@ -132,15 +118,10 @@ SKIP: {
         my $error  = $@;
 
         ok($error, 'processing failure croaks');
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
     note 'queue';
     {
-        my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
-
         my $count = 100;
         my $done  = AnyEvent->condvar;
         my %result;
@@ -165,10 +146,10 @@ SKIP: {
         foreach my $i (1 .. $count) {
             is($result{$i}, $i * 2, 'expected result');
         }
-
-        $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
 
     note 'max reqs';
     {
