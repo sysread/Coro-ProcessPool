@@ -70,106 +70,101 @@ SKIP: {
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
-    SKIP: {
-        #skip 'Enable with CORO_PROCESSPOOL_TEST_MULTIPROCESSING=1'
-        #    unless $ENV{CORO_PROCESSPOOL_TEST_MULTIPROCESSING};
+    note 'max reqs';
+    {
+        my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
+        my ($pid, $proc);
 
-        note 'max reqs';
-        {
-            my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
-            my ($pid, $proc);
+        # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
+        # next proc and ensure it's not the same one.
+        $proc = $pool->checkout_proc;
+        $pid = $proc->pid;
+        ++$proc->{messages_sent};
+        $pool->checkin_proc($proc);
 
-            # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
-            # next proc and ensure it's not the same one.
-            $proc = $pool->checkout_proc;
-            $pid = $proc->pid;
-            ++$proc->{messages_sent};
-            $pool->checkin_proc($proc);
+        # Check out new proc and verify it has a new pid
+        $proc = $pool->checkout_proc;
+        ok($pid != $proc->pid, 'max_reqs correctly spawns new processes');
 
-            # Check out new proc and verify it has a new pid
-            $proc = $pool->checkout_proc;
-            ok($pid != $proc->pid, 'max_reqs correctly spawns new processes');
-
-            # Verify that it doesn't happen when messages_sent isn't fudged.
-            $pid = $proc->pid;
-            $pool->checkin_proc($proc);
-            $proc = $pool->checkout_proc;
-            is($pid, $proc->pid, 'max_reqs does not respawn when unnecessary');
-            $pool->checkin_proc($proc);
-
-            $pool->shutdown;
-            is($pool->{num_procs}, 0, 'no processes after shutdown');
-        };
-
-        my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
-
-        note 'process';
-        {
-            my $count = 20;
-            my %result;
-
-            foreach my $i (1 .. $count) {
-                my $result = $pool->process($doubler, [ $i ]);
-                is($result, $i * 2, 'expected result');
-            }
-        };
-
-        note 'defer';
-        {
-            my $count = 20;
-            my %result;
-
-            foreach my $i (shuffle 1 .. $count) {
-                $result{$i} = $pool->defer($doubler, [$i]);
-            }
-
-            foreach my $i (1 .. $count) {
-                is($result{$i}->(), $i * 2, 'expected result');
-            }
-        };
-
-        note 'map';
-        {
-            my @numbers  = 1 .. 20;
-            my @expected = map { $_ * 2 } @numbers;
-            my @actual   = $pool->map($doubler, @numbers);
-            is_deeply(\@actual, \@expected, 'expected result');
-        };
-
-        note 'task errors';
-        {
-            my $croaker = sub {
-                my ($x) = @_;
-                return $x / 0;
-            };
-
-            my $result = eval { $pool->process($croaker, [1]) };
-            my $error  = $@;
-
-            ok($error, 'processing failure croaks');
-        };
-
-        note 'two pools';
-        {
-            my $pool2 = new_ok($class);
-            my $count = 20;
-            my %result;
-
-            foreach my $i (1 .. $count) {
-                if ($i % 2 == 0) {
-                    my $result = $pool->process($doubler, [ $i ]);
-                    is($result, $i * 2, 'expected result (pool 1)');
-                } else {
-                    my $result = $pool2->process($doubler, [ $i ]);
-                    is($result, $i * 2, 'expected result (pool 2)');
-                }
-            }
-
-            $pool2->shutdown;
-            is($pool2->{num_procs}, 0, 'no processes after shutdown');
-        }
+        # Verify that it doesn't happen when messages_sent isn't fudged.
+        $pid = $proc->pid;
+        $pool->checkin_proc($proc);
+        $proc = $pool->checkout_proc;
+        is($pid, $proc->pid, 'max_reqs does not respawn when unnecessary');
+        $pool->checkin_proc($proc);
 
         $pool->shutdown;
         is($pool->{num_procs}, 0, 'no processes after shutdown');
     };
+
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
+
+    note 'process';
+    {
+        my $count = 20;
+        my %result;
+
+        foreach my $i (1 .. $count) {
+            my $result = $pool->process($doubler, [ $i ]);
+            is($result, $i * 2, 'expected result');
+        }
+    };
+
+    note 'defer';
+    {
+        my $count = 20;
+        my %result;
+
+        foreach my $i (shuffle 1 .. $count) {
+            $result{$i} = $pool->defer($doubler, [$i]);
+        }
+
+        foreach my $i (1 .. $count) {
+            is($result{$i}->(), $i * 2, 'expected result');
+        }
+    };
+
+    note 'map';
+    {
+        my @numbers  = 1 .. 20;
+        my @expected = map { $_ * 2 } @numbers;
+        my @actual   = $pool->map($doubler, @numbers);
+        is_deeply(\@actual, \@expected, 'expected result');
+    };
+
+    note 'task errors';
+    {
+        my $croaker = sub {
+            my ($x) = @_;
+            return $x / 0;
+        };
+
+        my $result = eval { $pool->process($croaker, [1]) };
+        my $error  = $@;
+
+        ok($error, 'processing failure croaks');
+    };
+
+    note 'two pools';
+    {
+        my $pool2 = new_ok($class, [max_procs => 2]);
+        my $count = 20;
+        my %result;
+
+        foreach my $i (1 .. $count) {
+            if ($i % 2 == 0) {
+                my $result = $pool->process($doubler, [ $i ]);
+                is($result, $i * 2, 'expected result (pool 1)');
+            } else {
+                my $result = $pool2->process($doubler, [ $i ]);
+                is($result, $i * 2, 'expected result (pool 2)');
+            }
+        }
+
+        $pool2->shutdown;
+        is($pool2->{num_procs}, 0, 'no processes after shutdown');
+    }
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
