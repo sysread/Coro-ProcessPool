@@ -17,7 +17,8 @@ SKIP: {
     skip 'does not run under MSWin32' if $^O eq 'MSWin32';
     use_ok($class) or BAIL_OUT;
 
-    subtest 'process_task' => sub {
+    diag 'process_task';
+    {
         my $success = $class->process_task([$doubler, [21]]);
         is_deeply($success, [0, 42], 'code ref-based task produces expected result');
 
@@ -30,7 +31,8 @@ SKIP: {
         is_deeply($result, [0, 42], 'class-based task produces expected result');
     };
 
-    subtest 'shutdown' => sub {
+    diag 'shutdown';
+    {
         my $worker = new_ok($class);
         my $cv = AnyEvent->condvar;
 

@@ -24,8 +24,7 @@ SKIP: {
 
     use_ok($class) or BAIL_OUT;
 
-#    subtest 'start & stop' => sub {
-diag 'start & stop';
+    diag 'start & stop';
     {
         my $cpus = cpu_count();
         my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
@@ -34,8 +33,7 @@ diag 'start & stop';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-#    subtest 'checkout_proc' => sub {
-diag 'checkout_proc';
+    diag 'checkout_proc';
     {
         my $pool  = new_ok($class, [max_procs => 1])
             or BAIL_OUT 'Failed to create class';
@@ -73,8 +71,7 @@ diag 'checkout_proc';
         like($@, qr/not running/, 'checkout after shutdown throws error');
     };
 
-    #subtest 'max reqs' => sub {
-diag 'max reqs';
+    diag 'max reqs';
     {
         my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -114,8 +111,7 @@ diag 'max reqs';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    #subtest 'process' => sub {
-diag 'process';
+    diag 'process';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -131,8 +127,7 @@ diag 'process';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    #subtest 'defer' => sub {
-diag 'defer';
+    diag 'defer';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -151,8 +146,7 @@ diag 'defer';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    #subtest 'map' => sub {
-diag 'map';
+    diag 'map';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -165,8 +159,7 @@ diag 'map';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    #subtest 'fail' => sub {
-diag 'fail';
+    diag 'task errors';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
@@ -184,8 +177,7 @@ diag 'fail';
         is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
     };
 
-    #subtest 'queue' => sub {
-diag 'queue';
+    diag 'queue';
     {
         my $pool = new_ok($class, [max_procs => 1]) or BAIL_OUT 'Failed to create class';
 
