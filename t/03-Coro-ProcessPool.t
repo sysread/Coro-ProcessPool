@@ -77,7 +77,7 @@ SKIP: {
 
         # Check out proc, grab the pid, fudge messages sent, and check it back in. Then checkout the
         # next proc and ensure it's not the same one.
-        foreach my $i (1 .. 10) {
+        {
             my $pid;
             {
                 my $proc = $pool->checkout_proc;
