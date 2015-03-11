@@ -147,8 +147,32 @@ SKIP: {
         }
     };
 
+    note 'two pools';
+    {
+        my $pool2 = new_ok($class, [max_procs => 1]);
+
+        my $count = 20;
+        my %result;
+
+        foreach my $i (1 .. $count) {
+            if ($i % 2 == 0) {
+                my $result = $pool->process($doubler, [ $i ]);
+                is($result, $i * 2, 'expected result (pool 1)');
+            } else {
+                my $result = $pool2->process($doubler, [ $i ]);
+                is($result, $i * 2, 'expected result (pool 2)');
+            }
+        }
+
+        note 'sleeping...';
+        sleep 5;
+
+        $pool2->shutdown;
+        is($pool2->{num_procs}, 0, 'no processes after shutdown');
+    }
+
     $pool->shutdown;
-    is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 
     note 'max reqs';
     {
@@ -174,7 +198,7 @@ SKIP: {
         $pool->checkin_proc($proc);
 
         $pool->shutdown;
-        is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
+        is($pool->{num_procs}, 0, 'no processes after shutdown');
     };
 };
 
