@@ -23,6 +23,7 @@ WriteMakefile(
         'Guard'             => 0,
         'Module::Load'      => 0,
         'Moo'               => 0,
+        'Sereal'            => 0,
         'Storable'          => '2.05',
         'String::Escape'    => 0,
         'Sub::Override'     => 0,

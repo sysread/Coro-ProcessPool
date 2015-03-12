@@ -166,6 +166,33 @@ SKIP: {
         is($pool2->{num_procs}, 0, 'no processes after shutdown');
     }
 
+    note 'large tasks';
+    {
+        my $size  = 1_000_000;
+        my $count = 20;
+
+        my $f = sub {
+            my $data = $_[0];
+            my $res  = [ map { $_ * 2 } @$data ];
+            return $res;
+        };
+
+        my %pending;
+        my %expected;
+
+        foreach my $i (1 .. $count) {
+            my $data = [($i) x $size];
+            $expected{$i} = [($i * 2) x $size];
+            $pending{$i}  = $pool->defer($f, [$data]);
+        }
+
+        foreach my $i (keys %pending) {
+            is_deeply($pending{$i}->(), $expected{$i}, 'expected result');
+        }
+    }
+
+    note 'done';
+
     $pool->shutdown;
     is($pool->{num_procs}, 0, 'no processes after shutdown');
 };

@@ -5,13 +5,11 @@ use warnings;
 use Carp;
 use Config;
 use Const::Fast;
-use Coro::AnyEvent;
-use Storable;
-use Coro::Storable qw(nfreeze thaw);
-use MIME::Base64   qw(encode_base64 decode_base64);
-use String::Escape qw(backslash);
-use Devel::StackTrace;
-use Module::Load qw(load);
+use Storable        qw(freeze thaw);
+use MIME::Base64    qw(encode_base64 decode_base64);
+use String::Escape  qw(backslash);
+use Sereal::Encoder qw(sereal_encode_with_object SRL_SNAPPY);
+use Sereal::Decoder qw(sereal_decode_with_object);
 
 use base qw(Exporter);
 our @EXPORT_OK = qw(
@@ -26,21 +24,47 @@ our @EXPORT_OK = qw(
 const our $EOL => "\n";
 const our $DEFAULT_READ_TIMEOUT => 0.1;
 
+my $ENCODER = Sereal::Encoder->new();
+my $DECODER = Sereal::Decoder->new();
+
 sub encode {
-    no warnings 'once';
-    local $Storable::Deparse    = 1;
-    local $Storable::forgive_me = 1;
-    my $ref  = shift or croak 'encode: expected reference';
-    my $data = nfreeze($ref);
-    return encode_base64($data, '');
+    my ($id, $info, $data) = @_;
+    $data //= [];
+
+    my $package = {
+        id   => $id,
+        data => $data,
+        info => undef,
+        code => undef,
+    };
+
+    if (ref $info && ref $info eq 'CODE') {
+        no warnings 'once';
+        local $Storable::Deparse    = 1;
+        local $Storable::forgive_me = 1;
+        $package->{code} = freeze($info);
+    } else {
+        $package->{info} = $info;
+    }
+
+    my $pickled = sereal_encode_with_object($ENCODER, $package);
+    return encode_base64($pickled, '');
 }
 
 sub decode {
-    no warnings 'once';
-    local $Storable::Eval = 1;
     my $line = shift or croak 'decode: expected line';
-    my $data = decode_base64($line) or croak 'invalid data';
-    return thaw($data);
+    my $pickled = decode_base64($line);
+    my $package = sereal_decode_with_object($DECODER, $pickled);
+
+    my ($id, $info, $data) = @{$package}{qw(id info data)};
+
+    if ($package->{code}) {
+        no warnings 'once';
+        local $Storable::Eval = 1;
+        $info = thaw($package->{code});
+    }
+
+    return ($id, $info, $data);
 }
 
 sub get_command_path {

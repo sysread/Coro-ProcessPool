@@ -106,11 +106,10 @@ sub _build_child_in_watcher {
         my $self = shift;
 
         while (my $line = $self->child_in->readline($EOL)) {
-            my $msg = decode($line);
-            my ($id, $data) = @$msg;
+            my ($id, $error, $data) = decode($line);
 
             if (exists $self->inbox->{$id}) {
-                $self->inbox->{$id}->send($data);
+                $self->inbox->{$id}->send([$error, $data]);
             } else {
                 warn "Unexpected message received: $id";
             }
@@ -206,10 +205,10 @@ sub shutdown {
 }
 
 sub write {
-    my ($self, $data) = @_;
+    my ($self, $task, $args) = @_;
     my $id = Data::UUID->new->create_str();
     $self->inbox->{$id} = AnyEvent->condvar;
-    $self->child_out->print(encode([$id, $data]) . $EOL);
+    $self->child_out->print(encode($id, $task, $args) . $EOL);
     ++$self->{messages_sent};
     return $id;
 }
@@ -218,7 +217,7 @@ sub send {
     my ($self, $f, $args) = @_;
     croak 'not running' unless $self->is_running;
     $args ||= [];
-    return $self->write([$f, $args]);
+    return $self->write($f, $args);
 }
 
 sub recv {

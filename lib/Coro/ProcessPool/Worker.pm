@@ -8,6 +8,7 @@ use Coro;
 use Coro::Handle;
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
+use Devel::StackTrace;
 
 has queue => (
     is      => 'ro',
@@ -32,9 +33,8 @@ sub _build_input_monitor {
 
         eval {
             while (my $line = $self->input->readline($EOL)) {
-                my $data = decode($line);
-                my ($id, $task) = @$data;
-                $self->queue->put([$id, $task]);
+                my ($id, $task, $args) = decode($line);
+                $self->queue->put([$id, $task, $args]);
             }
         };
 
@@ -65,8 +65,8 @@ sub _build_output_monitor {
         my $self = shift;
 
         eval {
-            while (my $result = $self->completed->get) {
-                $self->output->print(encode($result) . $EOL);
+            while (my $data = $self->completed->get) {
+                $self->output->print(encode(@$data) . $EOL);
             }
         };
     } @_;
@@ -81,16 +81,16 @@ sub run {
 
     while (1) {
         my $job = $self->queue->get or last;
-        my ($id, $task) = @$job;
+        my ($id, $task, $args) = @$job;
 
         if (!ref($task) && $task eq 'SHUTDOWN') {
-            $self->completed->put([$id, [0, 'OK']]);
+            $self->completed->put([$id, 0, ['OK']]);
             $self->shutdown;
             next;
         }
 
-        my $reply = $self->process_task($task);
-        $self->completed->put([$id, $reply]);
+        my ($error, $result) = $self->process_task($task, $args);
+        $self->completed->put([$id, $error, $result]);
     }
 
     $self->completed->shutdown;
@@ -110,17 +110,16 @@ sub shutdown {
 }
 
 sub process_task {
-    my ($class, $task) = @_;
-    my ($f, $args) = @$task;
+    my ($class, $task, $args) = @_;
 
     my $result = eval {
-        if (ref $f && ref $f eq 'CODE') {
-            $f->(@$args);
+        if (ref $task && ref $task eq 'CODE') {
+            $task->(@$args);
         } else {
-            load $f;
-            die "method new() not found for class $f" unless $f->can('new');
-            die "method run() not found for class $f" unless $f->can('run');
-            my $obj = $f->new(@$args);
+            load $task;
+            die "method new() not found for class $task" unless $task->can('new');
+            die "method run() not found for class $task" unless $task->can('run');
+            my $obj = $task->new(@$args);
             $obj->run;
         }
     };
@@ -132,10 +131,10 @@ sub process_task {
             indent       => 1,
             ignore_class => ['Coro::ProcessPool::Util', 'Coro', 'AnyEvent'],
         );
-        return [1, $trace->as_string];
+        return (1, $trace->as_string);
     }
 
-    return [0, $result];
+    return (0, $result);
 }
 
 1;
