@@ -1,3 +1,7 @@
+0.21    2015-03-12
+    * Switched from Storable to Sereal
+    * Added tests for oversized data
+
 0.20    2015-03-11
     * Fixed bug causing processes to hang when shutting down
     * Better integration tests
