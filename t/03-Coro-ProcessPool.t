@@ -166,30 +166,35 @@ SKIP: {
         is($pool2->{num_procs}, 0, 'no processes after shutdown');
     }
 
-    note 'large tasks';
-    {
-        my $size  = 1_000_000;
-        my $count = 20;
+    SKIP: {
+        skip 'enable with CORO_PROCESSPOOL_ENABLE_EXPENSIVE_TESTS=1'
+            unless $ENV{CORO_PROCESSPOOL_ENABLE_EXPENSIVE_TESTS};
 
-        my $f = sub {
-            my $data = $_[0];
-            my $res  = [ map { $_ * 2 } @$data ];
-            return $res;
-        };
+        note 'large tasks';
+        {
+            my $size  = 1_000_000;
+            my $count = 20;
 
-        my %pending;
-        my %expected;
+            my $f = sub {
+                my $data = $_[0];
+                my $res  = [ map { $_ * 2 } @$data ];
+                return $res;
+            };
 
-        foreach my $i (1 .. $count) {
-            my $data = [($i) x $size];
-            $expected{$i} = [($i * 2) x $size];
-            $pending{$i}  = $pool->defer($f, [$data]);
+            my %pending;
+            my %expected;
+
+            foreach my $i (1 .. $count) {
+                my $data = [($i) x $size];
+                $expected{$i} = [($i * 2) x $size];
+                $pending{$i}  = $pool->defer($f, [$data]);
+            }
+
+            foreach my $i (keys %pending) {
+                is_deeply($pending{$i}->(), $expected{$i}, 'expected result');
+            }
         }
-
-        foreach my $i (keys %pending) {
-            is_deeply($pending{$i}->(), $expected{$i}, 'expected result');
-        }
-    }
+    };
 
     note 'done';
 
