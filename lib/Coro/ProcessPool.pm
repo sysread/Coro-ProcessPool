@@ -53,7 +53,7 @@ use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 
-our $VERSION = '0.22';
+our $VERSION = '0.22_1';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -85,7 +85,7 @@ memory over time.
 has max_reqs => (
     is      => 'ro',
     isa     => Int,
-    default => 0,
+    default => sub { 0 },
 );
 
 =head1 PRIVATE ATTRIBUTES
@@ -116,7 +116,7 @@ Running total of processes that are currently running.
 has num_procs => (
     is      => 'rw',
     isa     => Int,
-    default => 0,
+    default => sub { 0 },
 );
 
 =head2 procs
@@ -141,7 +141,7 @@ called.
 has is_running => (
     is      => 'rw',
     isa     => Bool,
-    default => 1,
+    default => sub { 1 },
 );
 
 =head1 METHODS

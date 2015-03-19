@@ -27,7 +27,7 @@ WriteMakefile(
         'Storable'          => '2.05',
         'String::Escape'    => 0,
         'Sub::Override'     => 0,
-        'Types::Standard'   => 0,
+        'Types::Standard'   => '1.0',
     },
     BUILD_REQUIRES => {
         'Test::More' => 0,
