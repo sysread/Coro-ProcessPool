@@ -90,7 +90,7 @@ has child_err => (
 
 has inbox => (
     is       => 'ro',
-    isa      => HashRef[Str, InstanceOf['Coro::Channel']],
+    isa      => HashRef,
     default  => sub { {} },
 );
 

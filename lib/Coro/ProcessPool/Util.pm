@@ -29,7 +29,7 @@ my $DECODER = Sereal::Decoder->new();
 
 sub encode {
     my ($id, $info, $data) = @_;
-    $data ||= [];
+    $data = [] unless defined $data;
 
     my $package = {
         id   => $id,
