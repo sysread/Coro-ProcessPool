@@ -76,3 +76,27 @@ subtest 'auto shutdown' => sub {
 
     is($received, scalar(@range), 'correct number of results');
 };
+
+subtest 'from pool' => sub {
+    my $pipeline = $pool->pipeline;
+    my @range = 1 .. 10;
+
+    my $producer = async {
+        foreach my $i (shuffle @range) {
+            $pipeline->queue(\&double, [$i]);
+        }
+
+        $pipeline->shutdown;
+    };
+
+    my $received = 0;
+
+    while (my $reply = $pipeline->next) {
+        my ($input, $result) = @$reply;
+        is($result, 2 * $input, "correct response: $input");
+        ++$received;
+    }
+
+    is($received, scalar(@range), 'correct number of results');
+};
+
