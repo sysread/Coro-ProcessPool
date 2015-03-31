@@ -1,6 +1,8 @@
 0.23    ????-??-??
     * Set min version of Types::Standard to avoid errors on older cpan testers boxes
     * Default values now use subs for older Moo versions
+    * Added Coro::ProcessPool::Pipeline class and pipeline method to Coro::ProcessPool
+    * Fixed bug where message was incorrectly encoded when task result was the value '0' (zero)
 
 0.22    2015-03-13
     * Disabled test that was running out of memory on cpan testers - sorry!

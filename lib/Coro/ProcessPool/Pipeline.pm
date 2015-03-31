@@ -59,21 +59,21 @@ triggered.
 has auto_shutdown => (
     is       => 'rw',
     isa      => Bool,
-    default  => 0,
+    default  => sub { 0 },
 );
 
 has is_shutdown => (
     is       => 'rw',
     isa      => Bool,
     init_arg => undef,
-    default  => 0,
+    default  => sub { 0 },
 );
 
 has num_pending => (
     is       => 'rw',
     isa      => Int,
     init_arg => undef,
-    default  => 0,
+    default  => sub { 0 },
 );
 
 has complete => (
