@@ -1,3 +1,6 @@
+0.24    2014-03-31
+    * Fixed missing argument
+
 0.23    2015-03-31
     * Set min version of Types::Standard to avoid errors on older cpan testers boxes
     * Default values now use subs for older Moo versions

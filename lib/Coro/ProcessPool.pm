@@ -54,7 +54,7 @@ use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -329,7 +329,7 @@ which may be created for a pool.
 
 sub pipeline {
     my $self = shift;
-    return Coro::ProcessPool::Pipeline->new(@_);
+    return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
 }
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
