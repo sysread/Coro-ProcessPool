@@ -52,6 +52,7 @@ use Coro::Channel;
 use Coro::ProcessPool::Process;
 use Coro::ProcessPool::Util;
 use Coro::Semaphore;
+require Coro::ProcessPool::Pipeline;
 
 our $VERSION = '0.22_1';
 
@@ -297,6 +298,38 @@ sub defer {
     } $self, $cv, @_;
 
     return sub { $cv->recv };
+}
+
+=head2 pipeline
+
+Returns a L<Coro::ProcessPool::Pipeline> object which can be used to pipe
+requests through to the process pool. Results then come out the other end of
+the pipe.  It is up to the calling code to perform task account (for example,
+by passing an id in as one of the arguments to the task class).
+
+    my $pipe = $pool->pipeline;
+
+    my $producer = async {
+        foreach my $args (@tasks) {
+            $pipe->queue('Some::Class', $args);
+        }
+
+        $pipe->shutdown;
+    };
+
+    while (my $result = $pipe->next) {
+        ...
+    }
+
+All arguments to C<pipeline()> are passed transparently to the constructor of
+L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
+which may be created for a pool.
+
+=cut
+
+sub pipeline {
+    my $self = shift;
+    return Coro::ProcessPool::Pipeline->new(@_);
 }
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
