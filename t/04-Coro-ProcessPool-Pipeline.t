@@ -30,6 +30,9 @@ subtest 'basic' => sub {
         }
 
         $pipeline->shutdown;
+
+        eval { $pipeline->queue };
+        like($@, qr/shutting down/, 'error triggered when queue is shutting down');
     };
 
     my $received = 0;
@@ -41,6 +44,9 @@ subtest 'basic' => sub {
     }
 
     is($received, scalar(@range), 'correct number of results');
+
+    eval { $pipeline->queue };
+    like($@, qr/shut down/, 'error triggered when queue is shut down');
 };
 
 subtest 'auto shutdown' => sub {

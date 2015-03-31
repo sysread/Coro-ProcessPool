@@ -9,16 +9,19 @@ Coro::ProcessPool::Pipeline
     my $pool = Coro::ProcesPool->new();
     my $pipe = $pool->pipeline;
 
+    # Start producer thread to queue tasks
     my $producer = async {
         while (my $task = get_next_task()) {
             $pipe->queue('Some::TaskClass', $task);
         }
 
+        # Let the pipeline know no more tasks are coming
         $pipe->shutdown;
     };
 
+    # Collect the results of each task as they are received
     while (my $result = $pipe->next) {
-        ...
+        do_stuff_with($result);
     }
 
 =head1 DESCRIPTION
@@ -30,6 +33,7 @@ collecting results. A pool may have multiple pipelines.
 
 use Moo;
 use Types::Standard qw(-types);
+use Carp;
 use Coro;
 use Coro::AnyEvent;
 use Coro::Channel;
@@ -62,6 +66,19 @@ has auto_shutdown => (
     default  => sub { 0 },
 );
 
+#-------------------------------------------------------------------------------
+# Internal flag to signal that no more tasks should be accepted.
+#-------------------------------------------------------------------------------
+has shutting_down => (
+    is       => 'rw',
+    isa      => Bool,
+    init_arg => undef,
+    default  => sub { 0 },
+);
+
+#-------------------------------------------------------------------------------
+# Internal flag to mark the pipeline has having been shut down.
+#-------------------------------------------------------------------------------
 has is_shutdown => (
     is       => 'rw',
     isa      => Bool,
@@ -69,6 +86,10 @@ has is_shutdown => (
     default  => sub { 0 },
 );
 
+#-------------------------------------------------------------------------------
+# In tandem with shutting_down and auto_shutdown, determines when it is
+# appropriate to automatically shutdown the queue.
+#-------------------------------------------------------------------------------
 has num_pending => (
     is       => 'rw',
     isa      => Int,
@@ -76,6 +97,9 @@ has num_pending => (
     default  => sub { 0 },
 );
 
+#-------------------------------------------------------------------------------
+# Stores complete results and provides the 'next' method.
+#-------------------------------------------------------------------------------
 has complete => (
     is       => 'ro',
     isa      => InstanceOf['Coro::Channel'],
@@ -86,6 +110,11 @@ has complete => (
 
 =head1 METHODS
 
+=head2 next
+
+Cedes control until a previously queued task is complete and the result is
+available.
+
 =head2 queue($task, $args)
 
 Queues a new task. Arguments are identical to L<Coro::ProcessPool::process> and
@@ -95,6 +124,9 @@ L<Coro::ProcessPool::defer>.
 
 sub queue {
     my ($self, @args) = @_;
+    croak 'pipeline is shut down' if $self->{is_shutdown};
+    croak 'pipeline is shutting down' if $self->{shutting_down};
+
     my $deferred = $self->pool->defer(@args);
 
     async_pool {
@@ -105,8 +137,9 @@ sub queue {
         --$self->{num_pending};
 
         if ($self->{num_pending} == 0) {
-            if ($self->{is_shutdown} || $self->{auto_shutdown}) {
+            if ($self->{shutting_down} || $self->{auto_shutdown}) {
                 $self->{complete}->shutdown;
+                $self->{is_shutdown} = 1;
             }
         }
     } $self, $deferred;
@@ -122,7 +155,7 @@ Signals shutdown of the pipeline. A shutdown pipeline may not be reused.
 
 sub shutdown {
     my $self = shift;
-    $self->{is_shutdown} = 1;
+    $self->{shutting_down} = 1;
 }
 
 1;
