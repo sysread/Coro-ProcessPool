@@ -17,86 +17,89 @@ sub double {
     return [$x, $x * 2];
 }
 
-my $pool = Coro::ProcessPool->new(max_procs => 2);
-scope_guard { $pool->shutdown };
+SKIP: {
+    skip 'does not run under MSWin32' if $^O eq 'MSWin32';
 
-subtest 'basic' => sub {
-    my $pipeline = new_ok($class, [pool => $pool]);
-    my @range = 1 .. 10;
+    my $pool = Coro::ProcessPool->new(max_procs => 2);
+    scope_guard { $pool->shutdown };
 
-    my $producer = async {
-        foreach my $i (shuffle @range) {
-            $pipeline->queue(\&double, [$i]);
+    subtest 'basic' => sub {
+        my $pipeline = new_ok($class, [pool => $pool]);
+        my @range = 1 .. 10;
+
+        my $producer = async {
+            foreach my $i (shuffle @range) {
+                $pipeline->queue(\&double, [$i]);
+            }
+
+            $pipeline->shutdown;
+
+            eval { $pipeline->queue };
+            like($@, qr/shutting down/, 'error triggered when queue is shutting down');
+        };
+
+        my $received = 0;
+
+        while (my $reply = $pipeline->next) {
+            my ($input, $result) = @$reply;
+            is($result, 2 * $input, "correct response: $input");
+            ++$received;
         }
 
-        $pipeline->shutdown;
+        is($received, scalar(@range), 'correct number of results');
 
         eval { $pipeline->queue };
-        like($@, qr/shutting down/, 'error triggered when queue is shutting down');
+        like($@, qr/shut down/, 'error triggered when queue is shut down');
     };
 
-    my $received = 0;
+    subtest 'auto shutdown' => sub {
+        my $pipeline = new_ok($class, [pool => $pool, auto_shutdown => 1]);
+        my @range = 1 .. 10;
 
-    while (my $reply = $pipeline->next) {
-        my ($input, $result) = @$reply;
-        is($result, 2 * $input, "correct response: $input");
-        ++$received;
-    }
+        my $producer = async {
+            foreach my $i (shuffle @range) {
+                $pipeline->queue(\&double, [$i]);
+            }
+        };
 
-    is($received, scalar(@range), 'correct number of results');
+        my $timer = async {
+            Coro::AnyEvent::sleep(30);
+            $producer->throw('timed out');
+        };
 
-    eval { $pipeline->queue };
-    like($@, qr/shut down/, 'error triggered when queue is shut down');
-};
+        my $received = 0;
 
-subtest 'auto shutdown' => sub {
-    my $pipeline = new_ok($class, [pool => $pool, auto_shutdown => 1]);
-    my @range = 1 .. 10;
-
-    my $producer = async {
-        foreach my $i (shuffle @range) {
-            $pipeline->queue(\&double, [$i]);
-        }
-    };
-
-    my $timer = async {
-        Coro::AnyEvent::sleep(30);
-        $producer->throw('timed out');
-    };
-
-    my $received = 0;
-
-    while (my $reply = $pipeline->next) {
-        my ($input, $result) = @$reply;
-        is($result, 2 * $input, "correct response: $input");
-        ++$received;
-    }
-
-    $timer->cancel;
-
-    is($received, scalar(@range), 'correct number of results');
-};
-
-subtest 'from pool' => sub {
-    my $pipeline = $pool->pipeline;
-    my @range = 1 .. 10;
-
-    my $producer = async {
-        foreach my $i (shuffle @range) {
-            $pipeline->queue(\&double, [$i]);
+        while (my $reply = $pipeline->next) {
+            my ($input, $result) = @$reply;
+            is($result, 2 * $input, "correct response: $input");
+            ++$received;
         }
 
-        $pipeline->shutdown;
+        $timer->cancel;
+
+        is($received, scalar(@range), 'correct number of results');
     };
 
-    my $received = 0;
+    subtest 'from pool' => sub {
+        my $pipeline = $pool->pipeline;
+        my @range = 1 .. 10;
 
-    while (my $reply = $pipeline->next) {
-        my ($input, $result) = @$reply;
-        is($result, 2 * $input, "correct response: $input");
-        ++$received;
-    }
+        my $producer = async {
+            foreach my $i (shuffle @range) {
+                $pipeline->queue(\&double, [$i]);
+            }
 
-    is($received, scalar(@range), 'correct number of results');
+            $pipeline->shutdown;
+        };
+
+        my $received = 0;
+
+        while (my $reply = $pipeline->next) {
+            my ($input, $result) = @$reply;
+            is($result, 2 * $input, "correct response: $input");
+            ++$received;
+        }
+
+        is($received, scalar(@range), 'correct number of results');
+    };
 };
-

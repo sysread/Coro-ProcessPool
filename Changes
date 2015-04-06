@@ -1,4 +1,8 @@
-0.24    2014-03-31
+0.25    2015-??-??
+    * Fix year in previous entry to Changes
+    * Add skip to pipeline test for mswin32
+
+0.24    2015-03-31
     * Fixed missing argument
 
 0.23    2015-03-31
