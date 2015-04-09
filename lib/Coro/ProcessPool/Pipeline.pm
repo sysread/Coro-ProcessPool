@@ -105,7 +105,6 @@ has complete => (
     isa      => InstanceOf['Coro::Channel'],
     init_arg => undef,
     default  => sub { Coro::Channel->new() },
-    handles  => { next => 'get' }
 );
 
 =head1 METHODS
@@ -114,6 +113,19 @@ has complete => (
 
 Cedes control until a previously queued task is complete and the result is
 available.
+
+=cut
+
+sub next {
+    my $self = shift;
+    my $finished = $self->complete->get or return;
+    my ($result, $error) = @$finished;
+    if ($error) {
+        croak $error;
+    } else {
+        return $result;
+    }
+}
 
 =head2 queue($task, $args)
 
@@ -131,9 +143,9 @@ sub queue {
 
     async_pool {
         my ($self, $deferred) = @_;
-        my $result = $deferred->();
+        my $result = eval { $deferred->() };
 
-        $self->{complete}->put($result);
+        $self->{complete}->put([$result, $@]);
         --$self->{num_pending};
 
         if ($self->{num_pending} == 0) {

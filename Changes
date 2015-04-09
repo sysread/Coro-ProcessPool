@@ -1,6 +1,7 @@
 0.25    2015-??-??
     * Fix year in previous entry to Changes
     * Add skip to pipeline test for mswin32
+    * Pipeline->next now recroaks errors
 
 0.24    2015-03-31
     * Fixed missing argument

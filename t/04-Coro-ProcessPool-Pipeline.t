@@ -17,6 +17,10 @@ sub double {
     return [$x, $x * 2];
 }
 
+sub error {
+    die 'test error';
+}
+
 SKIP: {
     skip 'does not run under MSWin32' if $^O eq 'MSWin32';
 
@@ -50,6 +54,14 @@ SKIP: {
 
         eval { $pipeline->queue };
         like($@, qr/shut down/, 'error triggered when queue is shut down');
+    };
+
+    subtest 'errors' => sub {
+        my $pipeline = new_ok($class, [pool => $pool]);
+        $pipeline->queue(\&error, []);
+        eval { $pipeline->next };
+        like($@, qr/test error/, 'errors correctly triggered');
+        $pipeline->shutdown;
     };
 
     subtest 'auto shutdown' => sub {
