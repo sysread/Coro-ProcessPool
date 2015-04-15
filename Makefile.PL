@@ -6,9 +6,6 @@ use ExtUtils::MakeMaker;
 die 'Coro::ProcessPool is not compatible with MSWin32 systems.'
     if $^O eq 'MSWin32';
 
-die 'Coro::ProcessPool is not compatible with threaded perls.'
-    if eval 'use threads; 1';
-
 WriteMakefile(
     NAME                => 'Coro::ProcessPool',
     AUTHOR              => q{"Jeff Ober" <"jeffober@gmail.com">},
