@@ -1,7 +1,7 @@
-0.25    2015-??-??
+0.25    2015-04-17
     * Fix year in previous entry to Changes
     * Pipeline->next now recroaks errors
-    * MSWin32 tests now fail loudly so no one mistakes this as working on Windows
+    * MSWin32 now fails to build in Makefile.PL
 
 0.24    2015-03-31
     * Fixed missing argument
