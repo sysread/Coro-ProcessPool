@@ -236,7 +236,7 @@ this method, the pool is effectively in a new state and may be used normally.
 =cut
 
 sub shutdown {
-    my ($self, $force) = @_;
+    my $self = shift;
 
     $self->is_running(0);
     $_->shutdown(5) foreach values %{$self->{all_procs}};
