@@ -32,7 +32,14 @@ sub BUILDARGS {
     my $exec = "$cmd $args";
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 
+    # Get real child process id (open3 creates parent -> sh -> perl). Worker
+    # will send its own pid once initialized.
+    my $child = <$r>;
+    $child or croak 'unable to talk to child process';
+    chomp $child;
+
     $args{pid}       = $pid;
+    $args{child}     = $child;
     $args{child_in}  = unblock $r;
     $args{child_out} = unblock $w;
     $args{child_err} = unblock $e;
@@ -51,6 +58,8 @@ sub DEMOLISH {
     my ($self, $global_destruct) = @_;
     $self->shutdown;
 }
+
+has child => (is => 'rw', isa => Int);
 
 has messages_sent => (
     is       => 'rw',
@@ -143,14 +152,14 @@ sub cleanup {
     }
 
     if ($self->child_in) {
-        $self->child_in_watcher->join;
+        $self->child_in_watcher->safe_cancel;
         $self->child_in->close;
         $self->clear_child_in_watcher;
         $self->clear_child_in;
     }
 
     if ($self->child_err) {
-        $self->child_err_watcher->join;
+        $self->child_err_watcher->safe_cancel;
         $self->child_err->close;
         $self->clear_child_err_watcher;
         $self->clear_child_err;
@@ -181,19 +190,9 @@ sub join {
 
 sub kill_process {
     my ($self, $timeout) = @_;
-
     return unless $self->is_running;
-
-    local $SIG{CHLD} = 'IGNORE';
-
-    my $id = $self->write('SHUTDOWN');
-    my $reply = $self->recv($id);
-    $self->child_out->close;
-
-    until ($self->join($timeout)) {
-        kill('KILL', $self->pid);
-        waitpid($self->pid, 0);
-    }
+    kill('KILL', $self->child);
+    waitpid($self->pid, 0);
 }
 
 sub shutdown {
@@ -206,6 +205,8 @@ sub shutdown {
 
 sub write {
     my ($self, $task, $args) = @_;
+    croak 'not running' unless $self->is_running;
+    croak 'process disconnected' unless $self->child_out;
     my $id = Data::UUID->new->create_str();
     $self->inbox->{$id} = AnyEvent->condvar;
     $self->child_out->print(encode($id, $task, $args) . $EOL);
@@ -215,9 +216,7 @@ sub write {
 
 sub send {
     my ($self, $f, $args) = @_;
-    croak 'not running' unless $self->is_running;
-    $args ||= [];
-    return $self->write($f, $args);
+    return $self->write($f, $args || []);
 }
 
 sub recv {

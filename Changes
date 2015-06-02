@@ -1,3 +1,7 @@
+0.26    2015-05-??
+    * More reliable process management
+    * Cleaner shutdown for processes and pool itself
+
 0.25    2015-04-17
     * Fix year in previous entry to Changes
     * Pipeline->next now recroaks errors

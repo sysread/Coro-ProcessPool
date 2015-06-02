@@ -54,7 +54,7 @@ use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -132,6 +132,16 @@ has procs => (
     default => sub { [] },
 );
 
+=head2 all_procs
+
+=cut
+
+has all_procs => (
+    is      => 'ro',
+    isa     => Map[Str, InstanceOf['Coro::Process']],
+    default => sub { {} },
+);
+
 =head2 is_running
 
 Boolean which signals to the instance that the C<shutdown> method has been
@@ -151,27 +161,33 @@ has is_running => (
 
 sub DEMOLISH {
     my $self = shift;
-    $self->shutdown;
+    if ($self->is_running) {
+        $self->shutdown;
+    }
 }
 
 sub BUILD {
     my $self = shift;
     for (1 .. $self->max_procs) {
-      $self->checkin_proc($self->start_proc);
+        $self->checkin_proc($self->start_proc);
     }
 }
 
 sub start_proc {
     my $self = shift;
     my $proc = Coro::ProcessPool::Process->new();
+    my $pid  = $proc->pid;
     ++$self->{num_procs};
+    $self->{all_procs}{$pid} = $proc;
     return $proc;
 }
 
 sub kill_proc {
     my ($self, $proc) = @_;
+    my $pid  = $proc->pid;
     $proc->shutdown;
     --$self->{num_procs};
+    delete $self->{all_procs}{$pid};
 }
 
 sub checkin_proc {
@@ -220,16 +236,14 @@ this method, the pool is effectively in a new state and may be used normally.
 =cut
 
 sub shutdown {
-    my $self = shift;
+    my ($self, $force) = @_;
 
     $self->is_running(0);
+    $_->shutdown(5) foreach values %{$self->{all_procs}};
 
-    my $count = $self->num_procs or return;
-    for (1 .. $count) {
-        my $proc = shift @{$self->procs};
-        $proc->shutdown(5);
-        --$self->{num_procs};
-    }
+    $self->{procs}      = [];
+    $self->{all_proces} = {};
+    $self->{num_procs}  = 0;
 }
 
 =head2 process($f, $args)
