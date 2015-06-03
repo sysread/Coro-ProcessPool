@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use Coro;
+use Guard qw(scope_guard);
 use List::Util qw(shuffle);
 
 BEGIN { use AnyEvent::Impl::Perl }
@@ -26,14 +27,21 @@ note 'shutdown';
 
     ok(my $id = $proc->send(\&test_sub, [21]), 'final send');
     ok($proc->shutdown($timeout), 'shutdown with pending task');
-    ok(my $reply = $proc->recv($id), 'reply received after termination');
-    is($reply, 42, 'received expected result');
+
+    my $reply = eval { $proc->recv($id) };
+    my $error = $@;
+
+    ok(!$reply, 'no reply received after termination');
+    ok($error, 'error thrown in recv after termination');
+    like($error, qr/process killed while waiting on this task to complete/, 'expected error');
 };
 
 note 'in order';
 {
     my $proc = new_ok($class);
     ok(my $pid = $proc->pid, 'spawned correctly');
+
+    scope_guard { $proc->shutdown($timeout) };
 
     my $count = 0;
     foreach my $i (@range) {
@@ -42,14 +50,14 @@ note 'in order';
         is($reply, $i * 2, "receives expected result ($i)");
         is($proc->messages_sent, ++$count, "message count tracking ($i)");
     }
-
-    $proc->shutdown($timeout);
 };
 
 note 'out of order';
 {
     my $proc = new_ok($class);
     ok(my $pid = $proc->pid, 'spawned correctly');
+
+    scope_guard { $proc->shutdown($timeout) };
 
     my %pending;
     foreach my $i (shuffle @range) {
@@ -62,8 +70,6 @@ note 'out of order';
         ok(my $reply = $proc->recv($id), "ooo recv ($i)");
         is($reply, $i * 2, "ooo receives expected result ($i)");
     }
-
-    $proc->shutdown($timeout);
 };
 
 done_testing;

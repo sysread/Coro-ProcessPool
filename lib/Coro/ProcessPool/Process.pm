@@ -164,6 +164,10 @@ sub cleanup {
         $self->clear_child_err_watcher;
         $self->clear_child_err;
     }
+
+    foreach my $id (keys %{$self->inbox}) {
+        $self->inbox->{$id}->croak('process killed while waiting on this task to complete');
+    }
 }
 
 sub join {
