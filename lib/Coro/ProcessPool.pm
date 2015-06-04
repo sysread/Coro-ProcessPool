@@ -54,7 +54,7 @@ use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
-our $VERSION = '0.25_1';
+our $VERSION = '0.25_2';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -244,6 +244,9 @@ sub shutdown {
     $self->{procs}      = [];
     $self->{all_proces} = {};
     $self->{num_procs}  = 0;
+    $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
+
+    return;
 }
 
 =head2 process($f, $args)
