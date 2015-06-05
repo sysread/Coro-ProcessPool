@@ -122,13 +122,13 @@ has num_procs => (
 
 =head2 procs
 
-Array holding the L<Coro::Process> objects.
+Array holding the L<Coro::ProcessPool::Process> objects.
 
 =cut
 
 has procs => (
     is      => 'ro',
-    isa     => ArrayRef[InstanceOf['Coro::Process']],
+    isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
     default => sub { [] },
 );
 
@@ -138,7 +138,7 @@ has procs => (
 
 has all_procs => (
     is      => 'ro',
-    isa     => Map[Str, InstanceOf['Coro::Process']],
+    isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
     default => sub { {} },
 );
 
@@ -169,7 +169,7 @@ sub DEMOLISH {
 sub BUILD {
     my $self = shift;
     for (1 .. $self->max_procs) {
-        $self->checkin_proc($self->start_proc);
+        unshift @{$self->procs}, $self->start_proc;
     }
 }
 
@@ -193,7 +193,12 @@ sub kill_proc {
 sub checkin_proc {
     my ($self, $proc) = @_;
 
-    if (!$self->is_running || ($self->max_reqs && $proc->messages_sent >= $self->max_reqs)) {
+    unless ($self->is_running) {
+      $self->kill_proc($proc);
+      return;
+    }
+
+    if ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
         $self->kill_proc($proc);
         unshift @{$self->procs}, $self->start_proc;
     } else {

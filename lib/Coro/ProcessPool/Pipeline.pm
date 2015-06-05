@@ -136,8 +136,16 @@ L<Coro::ProcessPool::defer>.
 
 sub queue {
     my ($self, @args) = @_;
-    croak 'pipeline is shut down' if $self->{is_shutdown};
-    croak 'pipeline is shutting down' if $self->{shutting_down};
+    croak 'pipeline is shut down' if $self->is_shutdown;
+    croak 'pipeline is shutting down' if $self->shutting_down;
+
+    unless ($self->pool->is_running) {
+        unless ($self->is_shutdown || $self->shutting_down) {
+            $self->shutdown;
+        }
+
+        croak 'pool is not running';
+    }
 
     my $deferred = $self->pool->defer(@args);
 
@@ -145,13 +153,14 @@ sub queue {
         my ($self, $deferred) = @_;
         my $result = eval { $deferred->() };
 
-        $self->{complete}->put([$result, $@]);
+        $self->complete->put([$result, $@]);
         --$self->{num_pending};
 
-        if ($self->{num_pending} == 0) {
-            if ($self->{shutting_down} || $self->{auto_shutdown}) {
-                $self->{complete}->shutdown;
-                $self->{is_shutdown} = 1;
+        if ($self->num_pending == 0) {
+            if ($self->shutting_down || $self->auto_shutdown) {
+                $self->complete->shutdown;
+                $self->is_shutdown(1);
+                $self->shutting_down(0);
             }
         }
     } $self, $deferred;
@@ -167,7 +176,7 @@ Signals shutdown of the pipeline. A shutdown pipeline may not be reused.
 
 sub shutdown {
     my $self = shift;
-    $self->{shutting_down} = 1;
+    $self->shutting_down(1);
 }
 
 1;
