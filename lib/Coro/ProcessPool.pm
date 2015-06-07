@@ -7,31 +7,61 @@ Coro::ProcessPool - an asynchronous process pool
 =head1 SYNOPSIS
 
     use Coro::ProcessPool;
+    use Coro;
 
     my $pool = Coro::ProcessPool->new(
         max_procs => 4,
         max_reqs  => 100,
+        include   => ['/path/to/my/task/classes', '/path/to/other/packages'],
     );
 
     my $double = sub { $_[0] * 2 };
 
+    #---------------------------------------------------------------------------
     # Process in sequence
+    #---------------------------------------------------------------------------
     my %result;
     foreach my $i (1 .. 1000) {
         $result{$i} = $pool->process($double, [$i]);
     }
 
+    #---------------------------------------------------------------------------
     # Process as a batch
+    #---------------------------------------------------------------------------
     my @results = $pool->map($double, 1 .. 1000);
 
+    #---------------------------------------------------------------------------
     # Defer waiting for result
+    #---------------------------------------------------------------------------
     my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
     foreach my $i (keys %deferred) {
         print "$i = " . $deferred{$i}->() . "\n";
     }
 
+    #---------------------------------------------------------------------------
     # Use a "task class", implementing 'new' and 'run'
+    #---------------------------------------------------------------------------
     my $result = $pool->process('Task::Doubler', 21);
+
+    #---------------------------------------------------------------------------
+    # Pipelines (work queues)
+    #---------------------------------------------------------------------------
+    my $pipe = $pool->pipeline;
+
+    # Start producer thread to queue tasks
+    my $producer = async {
+        while (my $task = get_next_task()) {
+            $pipe->queue('Some::TaskClass', $task);
+        }
+
+        # Let the pipeline know no more tasks are coming
+        $pipe->shutdown;
+    };
+
+    # Collect the results of each task as they are received
+    while (my $result = $pipe->next) {
+        do_stuff_with($result);
+    }
 
     $pool->shutdown;
 
@@ -54,7 +84,7 @@ use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
-our $VERSION = '0.25_2';
+our $VERSION = '0.25_3';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -87,6 +117,19 @@ has max_reqs => (
     is      => 'ro',
     isa     => Int,
     default => sub { 0 },
+);
+
+=head2 include
+
+An optional array ref of directory paths to prepend to the set of directories
+the worker process will use to find Perl packages.
+
+=cut
+
+has include => (
+    is      => 'ro',
+    isa     => ArrayRef[Str],
+    default => sub { [] },
 );
 
 =head1 PRIVATE ATTRIBUTES
@@ -175,7 +218,7 @@ sub BUILD {
 
 sub start_proc {
     my $self = shift;
-    my $proc = Coro::ProcessPool::Process->new();
+    my $proc = Coro::ProcessPool::Process->new(include => $self->include);
     my $pid  = $proc->pid;
     ++$self->{num_procs};
     $self->{all_procs}{$pid} = $proc;
@@ -326,8 +369,8 @@ sub defer {
 
 Returns a L<Coro::ProcessPool::Pipeline> object which can be used to pipe
 requests through to the process pool. Results then come out the other end of
-the pipe.  It is up to the calling code to perform task account (for example,
-by passing an id in as one of the arguments to the task class).
+the pipe. It is up to the calling code to perform task account (for example, by
+passing an id in as one of the arguments to the task class).
 
     my $pipe = $pool->pipeline;
 
@@ -346,6 +389,10 @@ by passing an id in as one of the arguments to the task class).
 All arguments to C<pipeline()> are passed transparently to the constructor of
 L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
 which may be created for a pool.
+
+If the pool is shutdown while the pipeline is active, any tasks pending in
+L<Coro::ProcessPool::Pipeline::next> will fail and cause the next call to
+C<next()> to croak.
 
 =cut
 

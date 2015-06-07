@@ -15,3 +15,4 @@ t/02-Coro-ProcessPool-Process.t
 t/03-Coro-ProcessPool.t
 t/04-Coro-ProcessPool-Pipeline.t
 t/TestTask.pm
+t/TestTaskNoNS.pm

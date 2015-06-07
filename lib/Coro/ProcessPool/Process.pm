@@ -25,10 +25,14 @@ BEGIN {
 
 sub BUILDARGS {
     my ($class, %args) = @_;
+    my $include = delete $args{include};
+
+    $include = [] unless defined $include;
+    $include = [$include] unless ref $include;
 
     my ($r, $w, $e) = (gensym, gensym, gensym);
     my $cmd  = get_command_path;
-    my $args = get_args;
+    my $args = get_args(@$include);
     my $exec = "$cmd $args";
     my $pid  = open3($w, $r, $e, $exec) or croak "Error spawning process: $!";
 

@@ -72,4 +72,18 @@ note 'out of order';
     }
 };
 
+note 'include path';
+{
+    my $proc = new_ok($class, [include => ['t/']]);
+    ok(my $pid = $proc->pid, 'spawned correctly');
+
+    scope_guard { $proc->shutdown($timeout) };
+
+    my $id = $proc->send('TestTaskNoNS', []);
+    my $rs = eval { $proc->recv($id) };
+
+    ok !$@, 'no errors' or diag $@;
+    is $rs, 42, 'expected result';
+}
+
 done_testing;
