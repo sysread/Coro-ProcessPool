@@ -84,7 +84,7 @@ use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
-our $VERSION = '0.25_4';
+our $VERSION = '0.25_5';
 
 if ($^O eq 'MSWin32') {
     die 'MSWin32 is not supported';
@@ -241,10 +241,14 @@ sub checkin_proc {
       return;
     }
 
-    if ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
+    if (!$proc->is_running) {
+        unshift @{$self->procs}, $self->start_proc;
+    }
+    elsif ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
         $self->kill_proc($proc);
         unshift @{$self->procs}, $self->start_proc;
-    } else {
+    }
+    else {
         unshift @{$self->procs}, $proc;
     }
 }

@@ -1,6 +1,7 @@
 package Coro::ProcessPool::Process;
 
 use Moo;
+use AnyEvent;
 use Carp;
 use Coro;
 use Coro::AnyEvent;
@@ -63,7 +64,27 @@ sub DEMOLISH {
     $self->shutdown;
 }
 
-has child => (is => 'rw', isa => Int);
+has watcher => (
+    is       => 'lazy',
+    isa      => InstanceOf['Coro'],
+    init_arg => undef,
+);
+
+sub _build_watcher {
+    my $self = shift;
+    async {
+        my $rouse_cb = Coro::rouse_cb;
+        my $event = AnyEvent->child(pid => $self->child, cb => $rouse_cb);
+        my ($pid, $code) = Coro::rouse_wait($rouse_cb);
+
+        if ($code != 0) {
+            $self->join;
+            $self->cleanup;
+        }
+
+        return;
+    };
+}
 
 has messages_sent => (
     is       => 'rw',
@@ -78,6 +99,14 @@ has pid => (
     required  => 1,
     clearer   => 'clear_pid',
     predicate => 'is_running',
+);
+
+has child => (
+    is        => 'ro',
+    isa       => Int,
+    required  => 1,
+    clearer   => 'clear_child',
+    predicate => 'child_is_running',
 );
 
 has child_in => (
@@ -193,6 +222,7 @@ sub join {
     }
 
     $self->clear_pid;
+    $self->clear_child;
     return 1;
 }
 
