@@ -3,7 +3,8 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 
-die 'Coro::ProcessPool is not compatible with MSWin32 systems.'
+die "Coro::ProcessPool is not compatible with MSWin32 systems\n".
+    "OS unsupported\n" #for cpantesters
     if $^O eq 'MSWin32';
 
 WriteMakefile(
