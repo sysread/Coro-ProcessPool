@@ -12,7 +12,7 @@ WriteMakefile1(
     AUTHOR              => q{"Jeff Ober" <"jeffober@gmail.com">},
     VERSION_FROM        => 'lib/Coro/ProcessPool.pm',
     ABSTRACT            => '',
-    'LICENSE'=> 'BSD License'
+    'LICENSE'=> 'BSD License',
     MIN_PERL_VERSION => '5.006',
     META_MERGE => {
         resources => {
