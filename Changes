@@ -3,6 +3,7 @@
     * Cleaner shutdown for processes and pool itself
     * Pipeline detects parent pool shutdown and shuts itself down
     * Additional include paths may now be manually specified to the pool
+    * Correct handling of MSWin32 in Makefile.PL (thanks Alexandr Ciornii)
 
 0.25    2015-04-17
     * Fix year in previous entry to Changes
