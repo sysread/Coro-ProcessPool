@@ -242,6 +242,9 @@ sub checkin_proc {
     }
 
     if (!$proc->is_running) {
+        my $pid = $proc->pid;
+        --$self->{num_procs};
+        delete $self->{all_procs}{$pid};
         unshift @{$self->procs}, $self->start_proc;
     }
     elsif ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {

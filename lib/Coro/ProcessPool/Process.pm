@@ -72,6 +72,7 @@ has watcher => (
 
 sub _build_watcher {
     my $self = shift;
+
     async {
         my $rouse_cb = Coro::rouse_cb;
         my $event = AnyEvent->child(pid => $self->child, cb => $rouse_cb);
@@ -93,20 +94,23 @@ has messages_sent => (
     default  => sub { 0 },
 );
 
+has is_running => (
+    is       => 'rw',
+    isa      => Bool,
+    init_arg => undef,
+    default  => sub { 1 },
+);
+
 has pid => (
     is        => 'ro',
     isa       => Int,
     required  => 1,
-    clearer   => 'clear_pid',
-    predicate => 'is_running',
 );
 
 has child => (
     is        => 'ro',
     isa       => Int,
     required  => 1,
-    clearer   => 'clear_child',
-    predicate => 'child_is_running',
 );
 
 has child_in => (
@@ -156,6 +160,8 @@ sub _build_child_in_watcher {
                 warn "Unexpected message received: $id";
             }
         }
+
+        $self->cleanup if $self->is_running;
     } @_;
 }
 
@@ -173,6 +179,8 @@ sub _build_child_err_watcher {
             warn sprintf("(WORKER PID %s) %s", ($self->pid || '(DEAD)'), $line);
             last unless $self->pid;
         }
+
+        $self->cleanup if $self->is_running;
     } @_;
 }
 
@@ -201,6 +209,8 @@ sub cleanup {
     foreach my $id (keys %{$self->inbox}) {
         $self->inbox->{$id}->croak('process killed while waiting on this task to complete');
     }
+
+    $self->is_running(0);
 }
 
 sub join {
@@ -221,8 +231,6 @@ sub join {
         }
     }
 
-    $self->clear_pid;
-    $self->clear_child;
     return 1;
 }
 
