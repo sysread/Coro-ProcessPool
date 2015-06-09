@@ -1,4 +1,4 @@
-0.26    2015-06-??
+0.26    2015-06-09
     * More reliable process management
     * Cleaner shutdown for processes and pool itself
     * Pipeline detects parent pool shutdown and shuts itself down
