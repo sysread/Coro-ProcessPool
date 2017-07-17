@@ -9,7 +9,7 @@ die "Coro::ProcessPool is not compatible with MSWin32 systems\n".
 
 WriteMakefile1(
     NAME                => 'Coro::ProcessPool',
-    AUTHOR              => q{"Jeff Ober" <"jeffober@gmail.com">},
+    AUTHOR              => 'Jeff Ober <sysread@fastmail.fm>',
     VERSION_FROM        => 'lib/Coro/ProcessPool.pm',
     ABSTRACT            => '',
     LICENSE             => 'BSD License',
