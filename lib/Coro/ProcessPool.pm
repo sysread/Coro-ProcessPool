@@ -398,7 +398,7 @@ L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
 which may be created for a pool.
 
 If the pool is shutdown while the pipeline is active, any tasks pending in
-L<Coro::ProcessPool::Pipeline::next> will fail and cause the next call to
+L<Coro::ProcessPool::Pipeline/next> will fail and cause the next call to
 C<next()> to croak.
 
 =cut
@@ -410,42 +410,12 @@ sub pipeline {
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
 
-Code refs are serialized using L<Storable> to pass them to the worker
-processes. Once deserialized in the pool process, these functions can no
-longer see the stack as it is in the parent process. Therefore, imports and
-variables external to the function are unavailable.
+Code refs are serialized using L<Data::Dump::Streamer>, allowing closed over
+variables to be available to the code being called in the sub-process. Note
+that mutated variables are I<not> updated when the result is returned.
 
-Something like this will not work:
-
-    use Foo;
-    my $foo = Foo->new();
-
-    my $result = $pool->process(sub {
-        return $foo->bar; # $foo not found
-    });
-
-Nor will this:
-
-    use Foo;
-    my $result = $pool->process(sub {
-        my $foo = Foo->new; # Foo not found
-        return $foo->bar;
-    });
-
-The correct way to do this is to import from within the function:
-
-    my $result = $pool->process(sub {
-        require Foo;
-        my $foo = Foo->new();
-        return $foo->bar;
-    });
-
-...or to pass in external variables that are needed by the function:
-
-    use Foo;
-    my $foo = Foo->new();
-
-    my $result = $pool->process(sub { $_[0]->bar }, [ $foo ]);
+See L<Data::Dump::Streamer/Caveats-Dumping-Closures-(CODE-Refs)> for important
+notes regarding closures.
 
 =head2 Use versus require
 
