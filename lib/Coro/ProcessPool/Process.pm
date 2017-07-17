@@ -75,7 +75,7 @@ sub _build_watcher {
 
     async {
         my $rouse_cb = Coro::rouse_cb;
-        my $event = AnyEvent->child(pid => $self->child, cb => $rouse_cb);
+        my $watcher = AE::child $self->child, $rouse_cb;
         my ($pid, $code) = Coro::rouse_wait($rouse_cb);
 
         if ($code != 0) {
@@ -193,20 +193,20 @@ sub cleanup {
     }
 
     if ($self->child_in) {
-        $self->child_in_watcher->safe_cancel;
+        $self->child_in_watcher && $self->child_in_watcher->safe_cancel;
         $self->child_in->close;
         $self->clear_child_in_watcher;
         $self->clear_child_in;
     }
 
     if ($self->child_err) {
-        $self->child_err_watcher->safe_cancel;
+        $self->child_err_watcher && $self->child_err_watcher->safe_cancel;
         $self->child_err->close;
         $self->clear_child_err_watcher;
         $self->clear_child_err;
     }
 
-    foreach my $id (keys %{$self->inbox}) {
+    foreach my $id (grep{ defined $self->inbox->{$_} } keys %{$self->inbox}) {
         $self->inbox->{$id}->croak('process killed while waiting on this task to complete');
     }
 

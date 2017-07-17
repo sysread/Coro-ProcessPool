@@ -25,7 +25,7 @@ WriteMakefile1(
     PREREQ_PM => {
         'AnyEvent'          => 0,
         'Const::Fast'       => 0,
-        'Coro'              => 0,
+        'Coro'              => '6.513',
         'Data::UUID'        => 0,
         'Devel::StackTrace' => 0,
         'Guard'             => 0,

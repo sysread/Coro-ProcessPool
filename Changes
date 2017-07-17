@@ -1,3 +1,6 @@
+0.27    2017-07-??
+    * Update to Coro 6.513 (experimental support for perls >= 5.22)
+
 0.26    2015-06-09
     * More reliable process management
     * Cleaner shutdown for processes and pool itself

@@ -6,8 +6,6 @@ use Coro::AnyEvent;
 
 BAIL_OUT 'MSWin32 is not supported' if $^O eq 'MSWin32';
 
-BEGIN { use AnyEvent::Impl::Perl }
-
 my $class = 'Coro::ProcessPool::Worker';
 
 my $doubler = sub {
