@@ -5,20 +5,21 @@ use warnings;
 use Carp;
 use Config;
 use Const::Fast;
-use Storable        qw(freeze thaw);
+use Data::Dump::Streamer;
 use MIME::Base64    qw(encode_base64 decode_base64);
 use String::Escape  qw(backslash);
 use Sereal::Encoder qw(sereal_encode_with_object SRL_SNAPPY);
 use Sereal::Decoder qw(sereal_decode_with_object);
 
-use base qw(Exporter);
+use parent 'Exporter';
+
 our @EXPORT_OK = qw(
-    get_command_path
-    get_args
-    cpu_count
-    encode
-    decode
-    $EOL
+  get_command_path
+  get_args
+  cpu_count
+  encode
+  decode
+  $EOL
 );
 
 const our $EOL => "\n";
@@ -28,43 +29,37 @@ my $ENCODER = Sereal::Encoder->new();
 my $DECODER = Sereal::Decoder->new();
 
 sub encode {
-    my ($id, $info, $data) = @_;
-    $data = [] unless defined $data;
+  my ($id, $info, $data) = @_;
+  $data = [] unless defined $data;
 
-    my $package = {
-        id   => $id,
-        data => $data,
-        info => undef,
-        code => undef,
-    };
+  my $package = {
+    id   => $id,
+    data => $data,
+    info => undef,
+    code => undef,
+  };
 
-    if (ref $info && ref $info eq 'CODE') {
-        no warnings 'once';
-        local $Storable::Deparse    = 1;
-        local $Storable::forgive_me = 1;
-        $package->{code} = freeze($info);
-    } else {
-        $package->{info} = $info;
-    }
+  if (ref $info && ref $info eq 'CODE') {
+    $package->{code} = Dump($info)->Purity(1)->Declare(1)->Indent(0)->Out;
+  } else {
+    $package->{info} = $info;
+  }
 
-    my $pickled = sereal_encode_with_object($ENCODER, $package);
-    return encode_base64($pickled, '');
+  my $pickled = sereal_encode_with_object($ENCODER, $package);
+  encode_base64 $pickled, '';
 }
 
 sub decode {
-    my $line = shift or croak 'decode: expected line';
-    my $pickled = decode_base64($line);
-    my $package = sereal_decode_with_object($DECODER, $pickled);
+  my $line = shift or croak 'decode: expected line';
+  my $pickled = decode_base64($line);
+  my $package = sereal_decode_with_object($DECODER, $pickled);
 
-    my ($id, $info, $data) = @{$package}{qw(id info data)};
+  my ($id, $info, $data) = @{$package}{qw(id info data)};
 
-    if ($package->{code}) {
-        no warnings 'once';
-        local $Storable::Eval = 1;
-        $info = thaw($package->{code});
-    }
+  $info = eval "do{ $package->{code} }"
+    if $package->{code};
 
-    return ($id, $info, $data);
+  return ($id, $info, $data);
 }
 
 sub get_command_path {

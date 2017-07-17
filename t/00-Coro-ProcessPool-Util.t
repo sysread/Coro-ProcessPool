@@ -1,33 +1,28 @@
 use strict;
 use warnings;
-use Test::More;
+use Test2::Bundle::Extended;
+use Coro::ProcessPool::Util qw(
+  encode
+  decode
+);
 
-BAIL_OUT 'MSWin32 is not supported' if $^O eq 'MSWin32';
+die 'MSWin32 is not supported' if $^O eq 'MSWin32';
 
-my $class = 'Coro::ProcessPool::Util';
+subtest 'encode/decode' => sub{
+  my @data = ('ABCD', 42, [qw(thanks for all the fish)]);
+  ok my $enc = encode(@data), 'encode';
+  ok my @dec = decode $enc, 'decode';
+  is @dec, @data, 'encode <-> decode';
+};
 
-use_ok($class) or BAIL_OUT;
+subtest 'code refs' => sub{
+  my @task = ('EFGH', sub{ $_[0] * 2 }, [21]);
+  ok my $enc = encode(@task), 'task structure encoded';
+  ok my @dec = decode($enc), 'task structure decoded';
 
-# Encode/decode compatibility
-{
-    my $data = ['ABCD', 42, [qw(thanks for all the fish)]];
-    ok(my $enc = $class->can('encode')->(@$data), 'data encoded');
-    is_deeply([$class->can('decode')->($enc)], $data, 'encode <-> decode');
-}
-
-# Compatibility with CODE refs and task structure
-{
-    my $task = ['EFGH', sub { $_[0] * 2 }, [21]];
-    my $enc = $class->can('encode')->(@$task);
-    ok($enc, 'task structure encoded');
-
-    my $dec = [$class->can('decode')->($enc)];
-    ok($dec, 'task structure decoded');
-
-    my ($id, $f, $args) = @$dec;
-    is($id, 'EFGH', 'id preserved');
-    my ($n) = @$args;
-    is($f->($n), 42, 'CODE and param list preserved');
-}
+  my ($id, $f, $args) = @dec;
+  is $id, 'EFGH', 'id is preserved';
+  is $f->(@$args), 42, 'CODE and param list preserved';
+};
 
 done_testing;
