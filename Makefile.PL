@@ -34,11 +34,16 @@ WriteMakefile1(
         'Moo'                  => 0,
         'Sereal'               => 0,
         'String::Escape'       => 0,
-        'Sub::Override'        => 0,
         'Types::Standard'      => '1.0',
     },
     TEST_REQUIRES => {
-        'Test::More' => 0,
+        'Coro'                    => '6.513',
+        'Test::More'              => 0,
+        'Devel::Cover'            => 0,
+        'Test2::Bundle::Extended' => 0,
+        'Guard'                   => 0,
+        'List::Util'              => 0,
+        'Sub::Override'           => 0,
     },
 );
 
