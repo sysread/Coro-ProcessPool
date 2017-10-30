@@ -1,4 +1,5 @@
-Makefile.old
-MYMETA.*
-blib/*
-pm_to_blib
+/.build
+/Coro-ProcessPool*
+*.swp
+/cover_db
+./scratch.pl
