@@ -20,8 +20,7 @@ my $doubler = sub {
 
 use_ok($class) or BAIL_OUT;
 
-note 'start & stop';
-{
+subtest 'start & stop' => sub {
     my $cpus     = 1;
     my $override = Sub::Override->new('Coro::ProcessPool::Util::cpu_count' => sub { $cpus });
     my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
@@ -30,8 +29,7 @@ note 'start & stop';
     is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
 };
 
-note 'checkout_proc';
-{
+subtest 'checkout_proc' => sub {
     my $pool = new_ok($class, [max_procs => 1])
         or BAIL_OUT 'Failed to create class';
 
@@ -68,8 +66,7 @@ note 'checkout_proc';
     like($@, qr/not running/, 'checkout after shutdown throws error');
 };
 
-note 'max reqs';
-{
+subtest 'max reqs' => sub {
     my $pool = new_ok($class, [max_procs => 1, max_reqs => 1]) or BAIL_OUT 'Failed to create class';
     my ($pid, $proc);
 
@@ -95,10 +92,8 @@ note 'max reqs';
     is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
-my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
-
-note 'process';
-{
+subtest 'process' => sub {
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
     my $count = 20;
     my %result;
 
@@ -108,8 +103,8 @@ note 'process';
     }
 };
 
-note 'defer';
-{
+subtest 'defer' => sub {
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
     my $count = 20;
     my %result;
 
@@ -122,16 +117,16 @@ note 'defer';
     }
 };
 
-note 'map';
-{
+subtest 'map' => sub {
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
     my @numbers  = 1 .. 20;
     my @expected = map { $_ * 2 } @numbers;
     my @actual   = $pool->map($doubler, @numbers);
     is_deeply(\@actual, \@expected, 'expected result');
 };
 
-note 'task errors';
-{
+subtest 'task errors' => sub {
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
     my $croaker = sub {
         my ($x) = @_;
         return $x / 0;
@@ -143,8 +138,8 @@ note 'task errors';
     ok($error, 'processing failure croaks');
 };
 
-note 'two pools';
-{
+subtest 'two pools' => sub {
+    my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
     my $pool2 = new_ok($class, [max_procs => 2]);
     my $count = 20;
     my %result;
@@ -161,13 +156,14 @@ note 'two pools';
 
     $pool2->shutdown;
     is($pool2->{num_procs}, 0, 'no processes after shutdown');
-}
+};
 
 SKIP: {
     skip('enable with CORO_PROCESSPOOL_ENABLE_EXPENSIVE_TESTS=1', 1)
         unless $ENV{CORO_PROCESSPOOL_ENABLE_EXPENSIVE_TESTS};
 
     subtest 'large tasks' => sub {
+        my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
         my $size  = 1_000_000;
         my $count = 20;
 
@@ -191,10 +187,5 @@ SKIP: {
         }
     };
 };
-
-note 'done';
-
-$pool->shutdown;
-is($pool->{num_procs}, 0, 'no processes after shutdown');
 
 done_testing;
