@@ -101,6 +101,9 @@ subtest 'process' => sub {
         my $result = $pool->process($doubler, [ $i ]);
         is($result, $i * 2, 'expected result');
     }
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'defer' => sub {
@@ -115,6 +118,9 @@ subtest 'defer' => sub {
     foreach my $i (1 .. $count) {
         is($result{$i}->(), $i * 2, 'expected result');
     }
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'map' => sub {
@@ -123,6 +129,9 @@ subtest 'map' => sub {
     my @expected = map { $_ * 2 } @numbers;
     my @actual   = $pool->map($doubler, @numbers);
     is_deeply(\@actual, \@expected, 'expected result');
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'task errors' => sub {
@@ -136,6 +145,9 @@ subtest 'task errors' => sub {
     my $error  = $@;
 
     ok($error, 'processing failure croaks');
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'two pools' => sub {
@@ -156,6 +168,9 @@ subtest 'two pools' => sub {
 
     $pool2->shutdown;
     is($pool2->{num_procs}, 0, 'no processes after shutdown');
+
+    $pool->shutdown;
+    is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 SKIP: {
@@ -185,6 +200,9 @@ SKIP: {
         foreach my $i (keys %pending) {
             is_deeply($pending{$i}->(), $expected{$i}, 'expected result');
         }
+
+        $pool->shutdown;
+        is($pool->{num_procs}, 0, 'no processes after shutdown');
     };
 };
 
