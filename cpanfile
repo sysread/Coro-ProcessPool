@@ -17,7 +17,8 @@ on test => sub {
   requires 'Devel::Cover'            => 0;
   requires 'List::Util'              => 0;
   requires 'Sub::Override'           => 0;
+  requires 'Test2'                   => '1.302106';
   requires 'Test2::Bundle::Extended' => 0;
   requires 'Test::More'              => 0;
-  requires 'Test::Pod'               => 1.41;
+  requires 'Test::Pod'               => '1.41';
 };
