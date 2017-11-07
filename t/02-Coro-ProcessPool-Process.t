@@ -71,7 +71,7 @@ subtest 'out of order' => sub{
 subtest 'include path' => sub{
   my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
-  diag $proc->cmd;
+  warn "COMMAND: ", $proc->cmd;
 
   scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
