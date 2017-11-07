@@ -1,63 +1,63 @@
 =head1 SYNOPSIS
 
-    use Coro::ProcessPool;
-    use Coro;
+  use Coro::ProcessPool;
+  use Coro;
 
-    my $pool = Coro::ProcessPool->new(
-        max_procs => 4,
-        max_reqs  => 100,
-        include   => ['/path/to/my/task/classes', '/path/to/other/packages'],
-    );
+  my $pool = Coro::ProcessPool->new(
+    max_procs => 4,
+    max_reqs  => 100,
+    include   => ['/path/to/my/task/classes', '/path/to/other/packages'],
+  );
 
-    my $double = sub { $_[0] * 2 };
+  my $double = sub { $_[0] * 2 };
 
-    #-----------------------------------------------------------------------
-    # Process in sequence
-    #-----------------------------------------------------------------------
-    my %result;
-    foreach my $i (1 .. 1000) {
-        $result{$i} = $pool->process($double, [$i]);
+  #-----------------------------------------------------------------------
+  # Process in sequence
+  #-----------------------------------------------------------------------
+  my %result;
+  foreach my $i (1 .. 1000) {
+    $result{$i} = $pool->process($double, [$i]);
+  }
+
+  #-----------------------------------------------------------------------
+  # Process as a batch
+  #-----------------------------------------------------------------------
+  my @results = $pool->map($double, 1 .. 1000);
+
+  #-----------------------------------------------------------------------
+  # Defer waiting for result
+  #-----------------------------------------------------------------------
+  my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
+  foreach my $i (keys %deferred) {
+    print "$i = " . $deferred{$i}->() . "\n";
+  }
+
+  #-----------------------------------------------------------------------
+  # Use a "task class", implementing 'new' and 'run'
+  #-----------------------------------------------------------------------
+  my $result = $pool->process('Task::Doubler', 21);
+
+  #-----------------------------------------------------------------------
+  # Pipelines (work queues)
+  #-----------------------------------------------------------------------
+  my $pipe = $pool->pipeline;
+
+  # Start producer thread to queue tasks
+  my $producer = async {
+    while (my $task = get_next_task()) {
+      $pipe->queue('Some::TaskClass', $task);
     }
 
-    #-----------------------------------------------------------------------
-    # Process as a batch
-    #-----------------------------------------------------------------------
-    my @results = $pool->map($double, 1 .. 1000);
+    # Let the pipeline know no more tasks are coming
+    $pipe->shutdown;
+  };
 
-    #-----------------------------------------------------------------------
-    # Defer waiting for result
-    #-----------------------------------------------------------------------
-    my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
-    foreach my $i (keys %deferred) {
-        print "$i = " . $deferred{$i}->() . "\n";
-    }
+  # Collect the results of each task as they are received
+  while (my $result = $pipe->next) {
+    do_stuff_with($result);
+  }
 
-    #-----------------------------------------------------------------------
-    # Use a "task class", implementing 'new' and 'run'
-    #-----------------------------------------------------------------------
-    my $result = $pool->process('Task::Doubler', 21);
-
-    #-----------------------------------------------------------------------
-    # Pipelines (work queues)
-    #-----------------------------------------------------------------------
-    my $pipe = $pool->pipeline;
-
-    # Start producer thread to queue tasks
-    my $producer = async {
-        while (my $task = get_next_task()) {
-            $pipe->queue('Some::TaskClass', $task);
-        }
-
-        # Let the pipeline know no more tasks are coming
-        $pipe->shutdown;
-    };
-
-    # Collect the results of each task as they are received
-    while (my $result = $pipe->next) {
-        do_stuff_with($result);
-    }
-
-    $pool->shutdown;
+  $pool->shutdown;
 
 =head1 DESCRIPTION
 
@@ -83,7 +83,7 @@ use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
 
 if ($^O eq 'MSWin32') {
-    die 'MSWin32 is not supported';
+  die 'MSWin32 is not supported';
 }
 
 =head1 ATTRIBUTES
@@ -96,9 +96,9 @@ to the number of CPUs on the ssytem.
 =cut
 
 has max_procs => (
-    is      => 'ro',
-    isa     => Int,
-    default => sub { Coro::ProcessPool::Util::cpu_count() },
+  is      => 'ro',
+  isa     => Int,
+  default => sub { Coro::ProcessPool::Util::cpu_count() },
 );
 
 =head2 max_reqs
@@ -110,9 +110,9 @@ memory over time.
 =cut
 
 has max_reqs => (
-    is      => 'ro',
-    isa     => Int,
-    default => sub { 0 },
+  is      => 'ro',
+  isa     => Int,
+  default => sub { 0 },
 );
 
 =head2 include
@@ -123,9 +123,9 @@ the worker process will use to find Perl packages.
 =cut
 
 has include => (
-    is      => 'ro',
-    isa     => ArrayRef[Str],
-    default => sub { [] },
+  is      => 'ro',
+  isa     => ArrayRef[Str],
+  default => sub { [] },
 );
 
 =head1 PRIVATE ATTRIBUTES
@@ -138,13 +138,13 @@ to the number of processes (C<max_procs>).
 =cut
 
 has procs_lock => (
-    is  => 'lazy',
-    isa => InstanceOf['Coro::Semaphore'],
+  is  => 'lazy',
+  isa => InstanceOf['Coro::Semaphore'],
 );
 
 sub _build_procs_lock {
-    my $self = shift;
-    return Coro::Semaphore->new($self->max_procs);
+  my $self = shift;
+  return Coro::Semaphore->new($self->max_procs);
 }
 
 =head2 num_procs
@@ -154,9 +154,9 @@ Running total of processes that are currently running.
 =cut
 
 has num_procs => (
-    is      => 'rw',
-    isa     => Int,
-    default => sub { 0 },
+  is      => 'rw',
+  isa     => Int,
+  default => sub { 0 },
 );
 
 =head2 procs
@@ -166,9 +166,9 @@ Array holding the L<Coro::ProcessPool::Process> objects.
 =cut
 
 has procs => (
-    is      => 'ro',
-    isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
-    default => sub { [] },
+  is      => 'ro',
+  isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
+  default => sub { [] },
 );
 
 =head2 all_procs
@@ -176,9 +176,9 @@ has procs => (
 =cut
 
 has all_procs => (
-    is      => 'ro',
-    isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
-    default => sub { {} },
+  is      => 'ro',
+  isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
+  default => sub { {} },
 );
 
 =head2 is_running
@@ -189,9 +189,9 @@ called.
 =cut
 
 has is_running => (
-    is      => 'rw',
-    isa     => Bool,
-    default => sub { 1 },
+  is      => 'rw',
+  isa     => Bool,
+  default => sub { 1 },
 );
 
 =head1 METHODS
@@ -199,73 +199,73 @@ has is_running => (
 =cut
 
 sub DEMOLISH {
-    my $self = shift;
-    if ($self->is_running) {
-        $self->shutdown;
-    }
+  my $self = shift;
+  if ($self->is_running) {
+    $self->shutdown;
+  }
 }
 
 sub BUILD {
-    my $self = shift;
-    for (1 .. $self->max_procs) {
-        unshift @{$self->procs}, $self->start_proc;
-    }
+  my $self = shift;
+  for (1 .. $self->max_procs) {
+    unshift @{$self->procs}, $self->start_proc;
+  }
 }
 
 sub start_proc {
-    my $self = shift;
-    my $proc = Coro::ProcessPool::Process->new(include => $self->include);
-    my $pid  = $proc->pid;
-    ++$self->{num_procs};
-    $self->{all_procs}{$pid} = $proc;
-    return $proc;
+  my $self = shift;
+  my $proc = Coro::ProcessPool::Process->new(include => $self->include);
+  my $pid  = $proc->pid;
+  ++$self->{num_procs};
+  $self->{all_procs}{$pid} = $proc;
+  return $proc;
 }
 
 sub kill_proc {
-    my ($self, $proc) = @_;
-    my $pid  = $proc->pid;
-    $proc->shutdown;
-    --$self->{num_procs};
-    delete $self->{all_procs}{$pid};
+  my ($self, $proc) = @_;
+  my $pid  = $proc->pid;
+  $proc->shutdown;
+  --$self->{num_procs};
+  delete $self->{all_procs}{$pid};
 }
 
 sub checkin_proc {
-    my ($self, $proc) = @_;
+  my ($self, $proc) = @_;
 
-    unless ($self->is_running) {
-      $self->kill_proc($proc);
-      return;
-    }
+  unless ($self->is_running) {
+    $self->kill_proc($proc);
+    return;
+  }
 
-    if (!$proc->is_running) {
-        my $pid = $proc->pid;
-        --$self->{num_procs};
-        delete $self->{all_procs}{$pid};
-        unshift @{$self->procs}, $self->start_proc;
-    }
-    elsif ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
-        $self->kill_proc($proc);
-        unshift @{$self->procs}, $self->start_proc;
-    }
-    else {
-        unshift @{$self->procs}, $proc;
-    }
+  if (!$proc->is_running) {
+    my $pid = $proc->pid;
+    --$self->{num_procs};
+    delete $self->{all_procs}{$pid};
+    unshift @{$self->procs}, $self->start_proc;
+  }
+  elsif ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
+    $self->kill_proc($proc);
+    unshift @{$self->procs}, $self->start_proc;
+  }
+  else {
+    unshift @{$self->procs}, $proc;
+  }
 }
 
 sub checkout_proc {
-    my $self = shift;
-    croak 'not running' unless $self->is_running;
+  my $self = shift;
+  croak 'not running' unless $self->is_running;
 
-    my $proc;
+  my $proc;
 
-    # Start a new process if none are available and there are worker slots open
-    if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
-        $proc = $self->start_proc;
-    } else {
-        $proc = shift @{$self->procs};
-    }
+  # Start a new process if none are available and there are worker slots open
+  if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
+    $proc = $self->start_proc;
+  } else {
+    $proc = shift @{$self->procs};
+  }
 
-    return $proc;
+  return $proc;
 }
 
 =head2 capacity
@@ -275,8 +275,8 @@ Returns the number of free worker processes.
 =cut
 
 sub capacity {
-    my $self = shift;
-    return scalar(@{$self->procs});
+  my $self = shift;
+  return scalar(@{$self->procs});
 }
 
 =head2 shutdown
@@ -287,17 +287,17 @@ this method, the pool is effectively in a new state and may be used normally.
 =cut
 
 sub shutdown {
-    my $self = shift;
+  my $self = shift;
 
-    $self->is_running(0);
-    $_->shutdown(5) foreach values %{$self->{all_procs}};
+  $self->is_running(0);
+  $_->shutdown(5) foreach values %{$self->{all_procs}};
 
-    $self->{procs}      = [];
-    $self->{all_proces} = {};
-    $self->{num_procs}  = 0;
-    $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
+  $self->{procs}    = [];
+  $self->{all_proces} = {};
+  $self->{num_procs}  = 0;
+  $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
 
-    return;
+  return;
 }
 
 =head2 process($f, $args)
@@ -319,13 +319,13 @@ C<max_reqs> can cause this method to yield while a new process is spawned.
 =cut
 
 sub process {
-    my ($self, $f, $args) = @_;
-    my $guard = $self->procs_lock->guard;
-    my $proc  = $self->checkout_proc;
-    scope_guard { $self->checkin_proc($proc) };
+  my ($self, $f, $args) = @_;
+  my $guard = $self->procs_lock->guard;
+  my $proc  = $self->checkout_proc;
+  scope_guard { $self->checkin_proc($proc) };
 
-    my $msgid = $proc->send($f, $args);
-    return $proc->recv($msgid);
+  my $msgid = $proc->send($f, $args);
+  return $proc->recv($msgid);
 }
 
 =head2 map($f, @args)
@@ -339,9 +339,9 @@ results of that calcuation is flattened into the list returned by C<map>.
 =cut
 
 sub map {
-    my ($self, $f, @args) = @_;
-    my @deferred = map { $self->defer($f, [$_]) } @args;
-    return map { $_->() } @deferred;
+  my ($self, $f, @args) = @_;
+  my @deferred = map { $self->defer($f, [$_]) } @args;
+  return map { $_->() } @deferred;
 }
 
 =head2 defer($f, $args)
@@ -349,23 +349,23 @@ sub map {
 Similar to L<./process>, but returns immediately. The return value is a code
 reference that, when called, returns the results of calling C<$f->(@$args)>.
 
-    my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
-    my $result   = $deferred->();
+  my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
+  my $result   = $deferred->();
 
 =cut
 
 sub defer {
-    my $self = shift;
-    my $cv   = AnyEvent->condvar;
+  my $self = shift;
+  my $cv   = AnyEvent->condvar;
 
-    async_pool {
-        my ($self, $cv, @args) = @_;
-        my $result = eval { $self->process(@args) };
-        $cv->croak($@) if $@;
-        $cv->send($result);
-    } $self, $cv, @_;
+  async_pool {
+    my ($self, $cv, @args) = @_;
+    my $result = eval { $self->process(@args) };
+    $cv->croak($@) if $@;
+    $cv->send($result);
+  } $self, $cv, @_;
 
-    return sub { $cv->recv };
+  return sub { $cv->recv };
 }
 
 =head2 pipeline
@@ -375,19 +375,19 @@ requests through to the process pool. Results then come out the other end of
 the pipe. It is up to the calling code to perform task account (for example, by
 passing an id in as one of the arguments to the task class).
 
-    my $pipe = $pool->pipeline;
+  my $pipe = $pool->pipeline;
 
-    my $producer = async {
-        foreach my $args (@tasks) {
-            $pipe->queue('Some::Class', $args);
-        }
-
-        $pipe->shutdown;
-    };
-
-    while (my $result = $pipe->next) {
-        ...
+  my $producer = async {
+    foreach my $args (@tasks) {
+      $pipe->queue('Some::Class', $args);
     }
+
+    $pipe->shutdown;
+  };
+
+  while (my $result = $pipe->next) {
+    ...
+  }
 
 All arguments to C<pipeline()> are passed transparently to the constructor of
 L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
@@ -400,8 +400,8 @@ C<next()> to croak.
 =cut
 
 sub pipeline {
-    my $self = shift;
-    return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
+  my $self = shift;
+  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
 }
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
@@ -422,42 +422,42 @@ evaluated when the calling code was compiled.
 
 This will not work:
 
-    $pool->process(sub {
-        use Foo;
-        my $foo = Foo->new();
-    });
+  $pool->process(sub {
+    use Foo;
+    my $foo = Foo->new();
+  });
 
 This will work:
 
-    $pool->process(sub {
-        require Foo;
-        my $foo = Foo->new();
-    });
+  $pool->process(sub {
+    require Foo;
+    my $foo = Foo->new();
+  });
 
 If C<use> is necessary (for example, to import a method or transform the
 calling code via import), it is recommended to move the code into its own
 module, which can then be called in the anonymous routine:
 
-    package Bar;
+  package Bar;
 
-    use Foo;
+  use Foo;
 
-    sub dostuff {
-        ...
-    }
+  sub dostuff {
+    ...
+  }
 
 Then, in your caller:
 
-    $pool->process(sub {
-        require Bar;
-        Bar::dostuff();
-    });
+  $pool->process(sub {
+    require Bar;
+    Bar::dostuff();
+  });
 
 =head2 If it's a problem...
 
 Use the task class method if the loading requirements are causing headaches:
 
-    my $result = $pool->process('Task::Class', [@args]);
+  my $result = $pool->process('Task::Class', [@args]);
 
 =head1 COMPATIBILITY
 

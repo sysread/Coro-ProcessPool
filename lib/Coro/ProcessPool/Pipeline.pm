@@ -4,23 +4,23 @@ Coro::ProcessPool::Pipeline
 
 =head1 SYNOPSIS
 
-    my $pool = Coro::ProcesPool->new();
-    my $pipe = $pool->pipeline;
+  my $pool = Coro::ProcesPool->new();
+  my $pipe = $pool->pipeline;
 
-    # Start producer thread to queue tasks
-    my $producer = async {
-        while (my $task = get_next_task()) {
-            $pipe->queue('Some::TaskClass', $task);
-        }
-
-        # Let the pipeline know no more tasks are coming
-        $pipe->shutdown;
-    };
-
-    # Collect the results of each task as they are received
-    while (my $result = $pipe->next) {
-        do_stuff_with($result);
+  # Start producer thread to queue tasks
+  my $producer = async {
+    while (my $task = get_next_task()) {
+      $pipe->queue('Some::TaskClass', $task);
     }
+
+    # Let the pipeline know no more tasks are coming
+    $pipe->shutdown;
+  };
+
+  # Collect the results of each task as they are received
+  while (my $result = $pipe->next) {
+    do_stuff_with($result);
+  }
 
 =head1 DESCRIPTION
 
@@ -49,9 +49,9 @@ The L<Coro::ProcessPool> in which to queue tasks.
 =cut
 
 has pool => (
-    is       => 'ro',
-    isa      => InstanceOf['Coro::ProcessPool'],
-    required => 1,
+  is     => 'ro',
+  isa    => InstanceOf['Coro::ProcessPool'],
+  required => 1,
 );
 
 =head2 auto_shutdown (default: false)
@@ -63,29 +63,29 @@ triggered.
 =cut
 
 has auto_shutdown => (
-    is       => 'rw',
-    isa      => Bool,
-    default  => sub { 0 },
+  is     => 'rw',
+  isa    => Bool,
+  default  => sub { 0 },
 );
 
 #-------------------------------------------------------------------------------
 # Internal flag to signal that no more tasks should be accepted.
 #-------------------------------------------------------------------------------
 has shutting_down => (
-    is       => 'rw',
-    isa      => Bool,
-    init_arg => undef,
-    default  => sub { 0 },
+  is     => 'rw',
+  isa    => Bool,
+  init_arg => undef,
+  default  => sub { 0 },
 );
 
 #-------------------------------------------------------------------------------
 # Internal flag to mark the pipeline has having been shut down.
 #-------------------------------------------------------------------------------
 has is_shutdown => (
-    is       => 'rw',
-    isa      => Bool,
-    init_arg => undef,
-    default  => sub { 0 },
+  is     => 'rw',
+  isa    => Bool,
+  init_arg => undef,
+  default  => sub { 0 },
 );
 
 #-------------------------------------------------------------------------------
@@ -93,20 +93,20 @@ has is_shutdown => (
 # appropriate to automatically shutdown the queue.
 #-------------------------------------------------------------------------------
 has num_pending => (
-    is       => 'rw',
-    isa      => Int,
-    init_arg => undef,
-    default  => sub { 0 },
+  is     => 'rw',
+  isa    => Int,
+  init_arg => undef,
+  default  => sub { 0 },
 );
 
 #-------------------------------------------------------------------------------
 # Stores complete results and provides the 'next' method.
 #-------------------------------------------------------------------------------
 has complete => (
-    is       => 'ro',
-    isa      => InstanceOf['Coro::Channel'],
-    init_arg => undef,
-    default  => sub { Coro::Channel->new() },
+  is     => 'ro',
+  isa    => InstanceOf['Coro::Channel'],
+  init_arg => undef,
+  default  => sub { Coro::Channel->new() },
 );
 
 =head1 METHODS
@@ -119,14 +119,14 @@ available.
 =cut
 
 sub next {
-    my $self = shift;
-    my $finished = $self->complete->get or return;
-    my ($result, $error) = @$finished;
-    if ($error) {
-        croak $error;
-    } else {
-        return $result;
-    }
+  my $self = shift;
+  my $finished = $self->complete->get or return;
+  my ($result, $error) = @$finished;
+  if ($error) {
+    croak $error;
+  } else {
+    return $result;
+  }
 }
 
 =head2 queue($task, $args)
@@ -137,37 +137,37 @@ L<Coro::ProcessPool::defer>.
 =cut
 
 sub queue {
-    my ($self, @args) = @_;
-    croak 'pipeline is shut down' if $self->is_shutdown;
-    croak 'pipeline is shutting down' if $self->shutting_down;
+  my ($self, @args) = @_;
+  croak 'pipeline is shut down' if $self->is_shutdown;
+  croak 'pipeline is shutting down' if $self->shutting_down;
 
-    unless ($self->pool->is_running) {
-        unless ($self->is_shutdown || $self->shutting_down) {
-            $self->shutdown;
-        }
-
-        croak 'pool is not running';
+  unless ($self->pool->is_running) {
+    unless ($self->is_shutdown || $self->shutting_down) {
+      $self->shutdown;
     }
 
-    my $deferred = $self->pool->defer(@args);
+    croak 'pool is not running';
+  }
 
-    async_pool {
-        my ($self, $deferred) = @_;
-        my $result = eval { $deferred->() };
+  my $deferred = $self->pool->defer(@args);
 
-        $self->complete->put([$result, $@]);
-        --$self->{num_pending};
+  async_pool {
+    my ($self, $deferred) = @_;
+    my $result = eval { $deferred->() };
 
-        if ($self->num_pending == 0) {
-            if ($self->shutting_down || $self->auto_shutdown) {
-                $self->complete->shutdown;
-                $self->is_shutdown(1);
-                $self->shutting_down(0);
-            }
-        }
-    } $self, $deferred;
+    $self->complete->put([$result, $@]);
+    --$self->{num_pending};
 
-    ++$self->{num_pending};
+    if ($self->num_pending == 0) {
+      if ($self->shutting_down || $self->auto_shutdown) {
+        $self->complete->shutdown;
+        $self->is_shutdown(1);
+        $self->shutting_down(0);
+      }
+    }
+  } $self, $deferred;
+
+  ++$self->{num_pending};
 }
 
 =head2 shutdown
@@ -177,8 +177,8 @@ Signals shutdown of the pipeline. A shutdown pipeline may not be reused.
 =cut
 
 sub shutdown {
-    my $self = shift;
-    $self->shutting_down(1);
+  my $self = shift;
+  $self->shutting_down(1);
 }
 
 1;
