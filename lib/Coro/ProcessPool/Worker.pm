@@ -1,4 +1,5 @@
 package Coro::ProcessPool::Worker;
+# ABSTRACT: Worker class that runs in the child process
 
 use Moo;
 use Types::Standard qw(-types);

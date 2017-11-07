@@ -1,4 +1,5 @@
 package Coro::ProcessPool::Process;
+# ABSTRACT: Single child process management
 
 use Moo;
 use AnyEvent;

@@ -1,6 +1,3 @@
-package Coro::ProcessPool;
-# ABSTRACT: An asynchronous process pool
-
 =head1 SYNOPSIS
 
     use Coro::ProcessPool;
@@ -67,6 +64,10 @@ package Coro::ProcessPool;
 Processes tasks using a pool of external Perl processes.
 
 =cut
+
+package Coro::ProcessPool;
+
+# ABSTRACT: An asynchronous process pool
 
 use Moo;
 use Types::Standard qw(-types);

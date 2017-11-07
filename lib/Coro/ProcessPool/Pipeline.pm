@@ -1,5 +1,3 @@
-package Coro::ProcessPool::Pipeline;
-
 =head1 NAME
 
 Coro::ProcessPool::Pipeline
@@ -30,6 +28,10 @@ Provides an iterative mechanism for feeding tasks into the process pool and
 collecting results. A pool may have multiple pipelines.
 
 =cut
+
+package Coro::ProcessPool::Pipeline;
+
+# ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
 
 use Moo;
 use Types::Standard qw(-types);

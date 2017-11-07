@@ -1,4 +1,5 @@
 package Coro::ProcessPool::Util;
+# ABSTRACT: Utility functions and constants used by Coro::ProcessPool
 
 use strict;
 use warnings;
