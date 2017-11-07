@@ -49,7 +49,6 @@ subtest 'in order' => sub{
   }
 };
 
-=cut
 subtest 'out of order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
@@ -69,6 +68,7 @@ subtest 'out of order' => sub{
   }
 };
 
+=cut
 subtest 'include path' => sub{
   my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
