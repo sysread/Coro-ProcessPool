@@ -71,13 +71,15 @@ subtest 'out of order' => sub{
 subtest 'include path' => sub{
   my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
-  warn "COMMAND: ", $proc->cmd;
 
-  scope_guard { $proc->shutdown($timeout); $proc->join(30); };
+  #scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
   my $rs;
   ok try_ok { $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
   is $rs, 42, 'expected result';
+
+  $proc->shutdown($timeout);
+  $proc->join(30);;
 };
 
 done_testing;

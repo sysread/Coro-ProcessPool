@@ -14,7 +14,6 @@ requires 'String::Escape'       => '2010.002';
 requires 'Types::Standard'      => '1.002001';
 
 on test => sub {
-  requires 'EV' => 0;
   requires 'Devel::Cover'            => '1.29';
   requires 'List::Util'              => '1.49';
   requires 'Sub::Override'           => '0.09';

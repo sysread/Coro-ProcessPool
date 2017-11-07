@@ -49,7 +49,6 @@ sub BUILDARGS {
   $args{child_in}  = unblock $r;
   $args{child_out} = unblock $w;
   $args{child_err} = unblock $e;
-  $args{cmd}       = $exec;
 
   return \%args;
 }
@@ -65,11 +64,6 @@ sub DEMOLISH {
   my ($self, $global_destruct) = @_;
   $self->shutdown;
 }
-
-has cmd => (
-  is => 'ro',
-  isa => Str,
-);
 
 has watcher => (
   is     => 'lazy',
