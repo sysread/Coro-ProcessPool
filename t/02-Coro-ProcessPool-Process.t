@@ -68,6 +68,7 @@ subtest 'out of order' => sub{
   }
 };
 
+=cut
 subtest 'include path' => sub{
   my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
@@ -78,5 +79,6 @@ subtest 'include path' => sub{
   ok try_ok { $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
   is $rs, 42, 'expected result';
 };
+=cut
 
 done_testing;
