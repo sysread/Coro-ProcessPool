@@ -18,7 +18,7 @@ sub test_sub {
 my @range = (1 .. 20);
 
 subtest 'shutdown' => sub{
-  my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
+  my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
 
   scope_guard { $proc->join(30); };
@@ -68,17 +68,17 @@ subtest 'out of order' => sub{
   }
 };
 
-=cut
 subtest 'include path' => sub{
-  my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
+  #my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
+  my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
 
   scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
   my $rs;
-  ok try_ok { $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
+  #ok try_ok { $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
+  ok try_ok { $rs = $proc->recv($proc->send('t::TestTask', [])) }, 'recv';
   is $rs, 42, 'expected result';
 };
-=cut
 
 done_testing;
