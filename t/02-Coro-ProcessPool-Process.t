@@ -34,7 +34,6 @@ subtest 'shutdown' => sub{
   like($error, qr/process killed while waiting on this task to complete/, 'expected error');
 };
 
-=cut
 subtest 'in order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
@@ -50,6 +49,7 @@ subtest 'in order' => sub{
   }
 };
 
+=cut
 subtest 'out of order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
