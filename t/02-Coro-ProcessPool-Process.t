@@ -19,8 +19,9 @@ my @range = (1 .. 20);
 
 subtest 'shutdown' => sub{
   my $proc = Coro::ProcessPool::Process->new;
-  scope_guard { $proc->join(30); };
   ok(my $pid = $proc->pid, 'spawned correctly');
+
+  scope_guard { $proc->join(30); };
 
   ok(my $id = $proc->send(\&test_sub, [21]), 'final send');
   ok($proc->shutdown($timeout), 'shutdown with pending task');
@@ -33,6 +34,7 @@ subtest 'shutdown' => sub{
   like($error, qr/process killed while waiting on this task to complete/, 'expected error');
 };
 
+=cut
 subtest 'in order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
@@ -77,5 +79,6 @@ subtest 'include path' => sub{
   ok lives{ $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
   is $rs, 42, 'expected result';
 };
+=cut
 
 done_testing;
