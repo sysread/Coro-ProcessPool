@@ -19,6 +19,7 @@ my @range = (1 .. 20);
 
 subtest 'shutdown' => sub{
   my $proc = Coro::ProcessPool::Process->new;
+  scope_guard { $proc->join(30); };
   ok(my $pid = $proc->pid, 'spawned correctly');
 
   ok(my $id = $proc->send(\&test_sub, [21]), 'final send');
@@ -36,7 +37,7 @@ subtest 'in order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
 
-  scope_guard { $proc->shutdown($timeout) };
+  scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
   my $count = 0;
   foreach my $i (@range) {
@@ -51,7 +52,7 @@ subtest 'out of order' => sub{
   my $proc = Coro::ProcessPool::Process->new;
   ok(my $pid = $proc->pid, 'spawned correctly');
 
-  scope_guard { $proc->shutdown($timeout) };
+  scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
   my %pending;
   foreach my $i (shuffle @range) {
@@ -70,7 +71,7 @@ subtest 'include path' => sub{
   my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
 
-  scope_guard { $proc->shutdown($timeout) };
+  scope_guard { $proc->shutdown($timeout); $proc->join(30); };
 
   my $rs;
   ok lives{ $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
