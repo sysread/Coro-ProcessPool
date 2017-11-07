@@ -18,7 +18,7 @@ sub test_sub {
 my @range = (1 .. 20);
 
 subtest 'shutdown' => sub{
-  my $proc = Coro::ProcessPool::Process->new;
+  my $proc = Coro::ProcessPool::Process->new(include => ['t/']);
   ok(my $pid = $proc->pid, 'spawned correctly');
 
   scope_guard { $proc->join(30); };
