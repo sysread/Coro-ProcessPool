@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More;
+use Test2::Bundle::Extended;
 use Coro;
 use Guard qw(scope_guard);
 use List::Util qw(shuffle);
@@ -73,8 +73,7 @@ subtest 'include path' => sub{
   scope_guard { $proc->shutdown($timeout) };
 
   my $rs;
-  ok eval{ $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
-  ok !$@, 'no error is thrown';
+  ok lives{ $rs = $proc->recv($proc->send('TestTaskNoNS', [])) }, 'recv';
   is $rs, 42, 'expected result';
 };
 

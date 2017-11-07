@@ -12,64 +12,64 @@ version 0.26_002
 
 =head1 SYNOPSIS
 
-    use Coro::ProcessPool;
-    use Coro;
+  use Coro::ProcessPool;
+  use Coro;
 
-    my $pool = Coro::ProcessPool->new(
-        max_procs => 4,
-        max_reqs  => 100,
-        include   => ['/path/to/my/task/classes', '/path/to/other/packages'],
-    );
+  my $pool = Coro::ProcessPool->new(
+    max_procs => 4,
+    max_reqs  => 100,
+    include   => ['/path/to/my/task/classes', '/path/to/other/packages'],
+  );
 
-    my $double = sub { $_[0] * 2 };
+  my $double = sub { $_[0] * 2 };
 
-    #-----------------------------------------------------------------------
-    # Process in sequence
-    #-----------------------------------------------------------------------
-    my %result;
-    foreach my $i (1 .. 1000) {
-        $result{$i} = $pool->process($double, [$i]);
+  #-----------------------------------------------------------------------
+  # Process in sequence
+  #-----------------------------------------------------------------------
+  my %result;
+  foreach my $i (1 .. 1000) {
+    $result{$i} = $pool->process($double, [$i]);
+  }
+
+  #-----------------------------------------------------------------------
+  # Process as a batch
+  #-----------------------------------------------------------------------
+  my @results = $pool->map($double, 1 .. 1000);
+
+  #-----------------------------------------------------------------------
+  # Defer waiting for result
+  #-----------------------------------------------------------------------
+  my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
+  foreach my $i (keys %deferred) {
+    print "$i = " . $deferred{$i}->() . "\n";
+  }
+
+  #-----------------------------------------------------------------------
+  # Use a "task class", implementing 'new' and 'run'
+  #-----------------------------------------------------------------------
+  my $result = $pool->process('Task::Doubler', 21);
+
+  #-----------------------------------------------------------------------
+  # Pipelines (work queues)
+  #-----------------------------------------------------------------------
+  my $pipe = $pool->pipeline;
+
+  # Start producer thread to queue tasks
+  my $producer = async {
+    while (my $task = get_next_task()) {
+      $pipe->queue('Some::TaskClass', $task);
     }
 
-    #-----------------------------------------------------------------------
-    # Process as a batch
-    #-----------------------------------------------------------------------
-    my @results = $pool->map($double, 1 .. 1000);
+    # Let the pipeline know no more tasks are coming
+    $pipe->shutdown;
+  };
 
-    #-----------------------------------------------------------------------
-    # Defer waiting for result
-    #-----------------------------------------------------------------------
-    my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
-    foreach my $i (keys %deferred) {
-        print "$i = " . $deferred{$i}->() . "\n";
-    }
+  # Collect the results of each task as they are received
+  while (my $result = $pipe->next) {
+    do_stuff_with($result);
+  }
 
-    #-----------------------------------------------------------------------
-    # Use a "task class", implementing 'new' and 'run'
-    #-----------------------------------------------------------------------
-    my $result = $pool->process('Task::Doubler', 21);
-
-    #-----------------------------------------------------------------------
-    # Pipelines (work queues)
-    #-----------------------------------------------------------------------
-    my $pipe = $pool->pipeline;
-
-    # Start producer thread to queue tasks
-    my $producer = async {
-        while (my $task = get_next_task()) {
-            $pipe->queue('Some::TaskClass', $task);
-        }
-
-        # Let the pipeline know no more tasks are coming
-        $pipe->shutdown;
-    };
-
-    # Collect the results of each task as they are received
-    while (my $result = $pipe->next) {
-        do_stuff_with($result);
-    }
-
-    $pool->shutdown;
+  $pool->shutdown;
 
 =head1 DESCRIPTION
 
@@ -155,8 +155,8 @@ results of that calcuation is flattened into the list returned by C<map>.
 Similar to L<./process>, but returns immediately. The return value is a code
 reference that, when called, returns the results of calling C<$f->(@$args)>.
 
-    my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
-    my $result   = $deferred->();
+  my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
+  my $result   = $deferred->();
 
 =head2 pipeline
 
@@ -165,19 +165,19 @@ requests through to the process pool. Results then come out the other end of
 the pipe. It is up to the calling code to perform task account (for example, by
 passing an id in as one of the arguments to the task class).
 
-    my $pipe = $pool->pipeline;
+  my $pipe = $pool->pipeline;
 
-    my $producer = async {
-        foreach my $args (@tasks) {
-            $pipe->queue('Some::Class', $args);
-        }
-
-        $pipe->shutdown;
-    };
-
-    while (my $result = $pipe->next) {
-        ...
+  my $producer = async {
+    foreach my $args (@tasks) {
+      $pipe->queue('Some::Class', $args);
     }
+
+    $pipe->shutdown;
+  };
+
+  while (my $result = $pipe->next) {
+    ...
+  }
 
 All arguments to C<pipeline()> are passed transparently to the constructor of
 L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
@@ -205,42 +205,42 @@ evaluated when the calling code was compiled.
 
 This will not work:
 
-    $pool->process(sub {
-        use Foo;
-        my $foo = Foo->new();
-    });
+  $pool->process(sub {
+    use Foo;
+    my $foo = Foo->new();
+  });
 
 This will work:
 
-    $pool->process(sub {
-        require Foo;
-        my $foo = Foo->new();
-    });
+  $pool->process(sub {
+    require Foo;
+    my $foo = Foo->new();
+  });
 
 If C<use> is necessary (for example, to import a method or transform the
 calling code via import), it is recommended to move the code into its own
 module, which can then be called in the anonymous routine:
 
-    package Bar;
+  package Bar;
 
-    use Foo;
+  use Foo;
 
-    sub dostuff {
-        ...
-    }
+  sub dostuff {
+    ...
+  }
 
 Then, in your caller:
 
-    $pool->process(sub {
-        require Bar;
-        Bar::dostuff();
-    });
+  $pool->process(sub {
+    require Bar;
+    Bar::dostuff();
+  });
 
 =head2 If it's a problem...
 
 Use the task class method if the loading requirements are causing headaches:
 
-    my $result = $pool->process('Task::Class', [@args]);
+  my $result = $pool->process('Task::Class', [@args]);
 
 =head1 COMPATIBILITY
 
