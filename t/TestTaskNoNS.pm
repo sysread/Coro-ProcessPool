@@ -4,13 +4,16 @@
 #-------------------------------------------------------------------------------
 package TestTaskNoNS;
 
+use strict;
+use warnings;
+
 sub new {
-    my ($class, @args) = @_;
-    return bless {}, $class;
+  my ($class, @args) = @_;
+  return bless {}, $class;
 }
 
 sub run {
-    return 42;
+  return 42;
 }
 
 1;

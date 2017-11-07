@@ -89,61 +89,61 @@ sub _build_watcher {
 }
 
 has messages_sent => (
-  is     => 'rw',
-  isa    => Int,
+  is       => 'rw',
+  isa      => Int,
   init_arg => undef,
   default  => sub { 0 },
 );
 
 has is_running => (
-  is     => 'rw',
-  isa    => Bool,
+  is       => 'rw',
+  isa      => Bool,
   init_arg => undef,
   default  => sub { 1 },
 );
 
 has pid => (
-  is    => 'ro',
-  isa     => Int,
-  required  => 1,
+  is       => 'ro',
+  isa      => Int,
+  required => 1,
 );
 
 has child => (
-  is    => 'ro',
-  isa     => Int,
-  required  => 1,
+  is       => 'ro',
+  isa      => Int,
+  required => 1,
 );
 
 has child_in => (
-  is     => 'ro',
-  isa    => InstanceOf['Coro::Handle'],
+  is       => 'ro',
+  isa      => InstanceOf['Coro::Handle'],
   required => 1,
   clearer  => 'clear_child_in',
 );
 
 has child_out => (
-  is     => 'ro',
-  isa    => InstanceOf['Coro::Handle'],
+  is       => 'ro',
+  isa      => InstanceOf['Coro::Handle'],
   required => 1,
   clearer  => 'clear_child_out',
 );
 
 has child_err => (
-  is     => 'ro',
-  isa    => InstanceOf['Coro::Handle'],
+  is       => 'ro',
+  isa      => InstanceOf['Coro::Handle'],
   required => 1,
   clearer  => 'clear_child_err',
 );
 
 has inbox => (
-  is     => 'ro',
-  isa    => HashRef,
-  default  => sub { {} },
+  is      => 'ro',
+  isa     => HashRef,
+  default => sub { {} },
 );
 
 has child_in_watcher => (
-  is     => 'lazy',
-  isa    => InstanceOf['Coro'],
+  is       => 'lazy',
+  isa      => InstanceOf['Coro'],
   init_arg => undef,
   clearer  => 'clear_child_in_watcher',
 );
@@ -167,8 +167,8 @@ sub _build_child_in_watcher {
 }
 
 has child_err_watcher => (
-  is     => 'lazy',
-  isa    => InstanceOf['Coro'],
+  is       => 'lazy',
+  isa      => InstanceOf['Coro'],
   init_arg => undef,
   clearer  => 'clear_child_err_watcher',
 );
