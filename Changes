@@ -1,6 +1,7 @@
 {{NEXT}}
 - Update to Coro 6.514 (experimental support for perls >= 5.22)
 - Better support for closures using Data::Dump::Streamer
+- Refactor, simplify, and modernize
 
 0.26 2015-06-09
 - More reliable process management

@@ -8,7 +8,7 @@ Coro::ProcessPool - An asynchronous process pool
 
 =head1 VERSION
 
-version 0.26_003
+version 0.26_004
 
 =head1 SYNOPSIS
 

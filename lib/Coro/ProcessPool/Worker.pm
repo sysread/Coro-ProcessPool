@@ -1,77 +1,40 @@
 package Coro::ProcessPool::Worker;
-# ABSTRACT: Worker class that runs in the child process
 
-use Moo;
-use Types::Standard qw(-types);
-use AnyEvent;
-use Carp;
+use strict;
+use warnings;
 use Coro;
-use Coro::Handle;
+use Coro::Handle qw(unblock);
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
 use Devel::StackTrace;
 
-has queue => (
-  is      => 'ro',
-  isa     => InstanceOf['Coro::Channel'],
-  default => sub { Coro::Channel->new() },
-);
+sub run {
+  my $in  = unblock *STDIN;
+  my $out = unblock *STDOUT;
 
-has input => (
-  is      => 'ro',
-  isa     => InstanceOf['Coro::Handle'],
-  default => sub { unblock(*STDIN) },
-);
+  $out->print($$ . $EOL);
 
-has input_monitor => (
-  is  => 'lazy',
-  isa => InstanceOf['Coro'],
-);
+  while (my $line = $in->readline($EOL)) {
+    my @task = decode($line);
 
-sub _build_input_monitor {
-  return async {
-    my $self = shift;
-    while (my $line = $self->input->readline($EOL)) {
-      my ($id, $task, $args) = decode($line);
-      $self->queue->put([$id, $task, $args]);
+    if ($task[1] eq 'self-terminate') {
+      last;
     }
-  } @_;
+
+    async_pool {
+      my ($out, $id, $task, $args) = @_;
+      my ($error, $result) = process_task($task, $args);
+      $out->print(encode($id, $error, $result) . $EOL);
+    } $out, @task;
+  }
+
+  $in->close;
+  $out->close;
+  exit 0;
 }
-
-has completed => (
-  is      => 'ro',
-  isa     => InstanceOf['Coro::Channel'],
-  default => sub { Coro::Channel->new() },
-);
-
-has output => (
-  is      => 'ro',
-  isa     => InstanceOf['Coro::Handle'],
-  default => sub { unblock(*STDOUT) },
-);
-
-has output_monitor => (
-  is  => 'lazy',
-  isa => InstanceOf['Coro'],
-);
-
-sub _build_output_monitor {
-  return async {
-    my $self = shift;
-    while (my $data = $self->completed->get) {
-      $self->output->print(encode(@$data) . $EOL);
-    }
-  } @_;
-}
-
-before run => sub {
-  my $self = shift;
-  $self->input_monitor;
-  $self->output_monitor;
-};
 
 sub process_task {
-  my ($class, $task, $args) = @_;
+  my ($task, $args) = @_;
 
   my $result = eval {
     if (ref $task && ref $task eq 'CODE') {
@@ -96,21 +59,6 @@ sub process_task {
   }
 
   return (0, $result);
-}
-
-sub run {
-  my $self = shift;
-  $self->output->print($$ . $EOL);
-
-  while (1) {
-    my $job = $self->queue->get or last;
-    my ($id, $task, $args) = @$job;
-    last if $task eq 'self-terminate';
-    my ($error, $result) = $self->process_task($task, $args);
-    $self->completed->put([$id, $error, $result]);
-  }
-
-  exit 0;
 }
 
 1;

@@ -72,7 +72,7 @@ sub get_command_path {
 
 sub get_args {
   my @inc = map { sprintf('-I%s', backslash($_)) } @_, @INC;
-  my $cmd = q|-MCoro::ProcessPool::Worker -e 'Coro::ProcessPool::Worker->new->run'|;
+  my $cmd = q|-MCoro::ProcessPool::Worker -e 'Coro::ProcessPool::Worker::run()'|;
   return join ' ', @inc, $cmd;
 }
 
