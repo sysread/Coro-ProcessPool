@@ -22,15 +22,18 @@ sub worker {
   my $args  = get_args(@$inc);
   my $exec  = "$cmd $args";
 
-  my ($parent_in, $child_out) = portable_pipe;
-  my ($child_in, $parent_out) = portable_pipe;
+  my ($child_in, $parent_out)  = portable_pipe;
+  my ($parent_in, $child_out)  = portable_pipe;
+  my ($parent_err, $child_err) = portable_pipe;
 
   my $proc = bless {
     pid     => undef,
     in      => unblock($parent_in),
     out     => unblock($parent_out),
+    err     => unblock($parent_err),
     inbox   => {},
     reader  => undef,
+    monitor => undef,
     stopped => undef,
     started => AE::cv,
     counter => 0,
@@ -42,17 +45,21 @@ sub worker {
     '$$' => \$proc->{pid},
     '>'  => $child_out,
     '<'  => $child_in,
-    '2>' => sub {
-      my $err = shift;
-      return unless defined $err;
-      warn "worker error: $err\n";
-    }
+    '2>' => $child_err,
   );
 
   $proc->{stopped}->cb(sub {
     $proc->{in}->close;
     $proc->{out}->close;
   });
+  
+  $proc->{monitor} = async {
+    my $proc = shift;
+
+    while (my $err = $proc->{err}->readline) {
+      warn "[worker pid:$proc->{pid}] $err\n";
+    }
+  } $proc;
 
   $proc->{reader} = async {
     my $proc = shift;
