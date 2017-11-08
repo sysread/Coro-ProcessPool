@@ -3,6 +3,7 @@ package Coro::ProcessPool::Process;
 use strict;
 use warnings;
 use Coro;
+use Coro::Countdown;
 use Data::UUID;
 use Coro::AnyEvent;
 use POSIX qw(:sys_wait_h);
@@ -33,6 +34,7 @@ sub worker {
     stopped => undef,
     started => AE::cv,
     counter => 0,
+    pending => Coro::Countdown->new,
   }, 'Coro::ProcessPool::Process';
 
   $proc->{stopped} = run_cmd $exec, (
@@ -48,8 +50,6 @@ sub worker {
   );
 
   $proc->{stopped}->cb(sub {
-    my $cv = shift;
-    $cv->recv;
     $proc->{in}->close;
     $proc->{out}->close;
   });
@@ -74,6 +74,8 @@ sub worker {
         }
 
         delete $proc->{inbox}{$id};
+        $proc->{pending}->down;
+
       } else {
         warn "Unexpected message received: $id";
       }
@@ -92,6 +94,7 @@ sub await {
 
 sub join {
   my $proc = shift;
+  $proc->{pending}->join;
   $proc->{stopped}->recv;
 }
 
@@ -105,12 +108,16 @@ sub alive {
 
 sub stop {
   my $proc = shift;
-  $proc->send('self-terminate') if $proc->alive;;
+  if ($proc->alive) {
+    $proc->{out}->print(encode('', 'self-terminate', []) . $EOL);
+  }
 }
 
 sub kill {
   my $proc = shift;
-  kill('KILL', $proc->{pid}) if $proc->alive;
+  if ($proc->alive) {
+    kill('KILL', $proc->{pid});
+  }
 }
 
 sub send {
@@ -127,6 +134,7 @@ sub send {
   } $proc, $id, $f, $args;
 
   ++$proc->{counter};
+  $proc->{pending}->up;
 
   return $proc->{inbox}{$id};
 }

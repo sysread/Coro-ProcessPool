@@ -3,6 +3,7 @@ requires 'perl', '5.010';
 requires 'AnyEvent'             => '7.14';
 requires 'Const::Fast'          => '0.014';
 requires 'Coro'                 => '6.514';
+requires 'Coro::Countdown'      => '0.02';
 requires 'Data::Dump::Streamer' => '2.40';
 requires 'Data::UUID'           => '1.221';
 requires 'Devel::StackTrace'    => '2.02';
