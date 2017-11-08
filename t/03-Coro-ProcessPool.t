@@ -93,8 +93,8 @@ subtest 'max reqs' => sub {
 };
 
 subtest 'process' => sub {
-  my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
-  my $count = 20;
+  my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
+  my $count = 10;
   my %result;
 
   foreach my $i (1 .. $count) {
@@ -107,8 +107,8 @@ subtest 'process' => sub {
 };
 
 subtest 'defer' => sub {
-  my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
-  my $count = 20;
+  my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
+  my $count = 10;
   my %result;
 
   foreach my $i (shuffle 1 .. $count) {
@@ -124,8 +124,8 @@ subtest 'defer' => sub {
 };
 
 subtest 'map' => sub {
-  my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
-  my @numbers  = 1 .. 20;
+  my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
+  my @numbers  = 1 .. 10;
   my @expected = map { $_ * 2 } @numbers;
   my @actual   = $pool->map($doubler, @numbers);
   is_deeply(\@actual, \@expected, 'expected result');
@@ -135,7 +135,7 @@ subtest 'map' => sub {
 };
 
 subtest 'task errors' => sub {
-  my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
+  my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
   my $croaker = sub {
     my ($x) = @_;
     return $x / 0;
@@ -151,9 +151,9 @@ subtest 'task errors' => sub {
 };
 
 subtest 'two pools' => sub {
-  my $pool = new_ok($class, [max_procs => 4, max_reqs => 2]) or BAIL_OUT 'Failed to create class';
+  my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
   my $pool2 = new_ok($class, [max_procs => 2]);
-  my $count = 20;
+  my $count = 10;
   my %result;
 
   foreach my $i (1 .. $count) {
