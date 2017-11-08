@@ -74,6 +74,8 @@ sub run {
     my ($error, $result) = $self->process_task($task, $args);
     $self->completed->put([$id, $error, $result]);
   }
+
+  exit 0;
 }
 
 before run => sub {

@@ -77,7 +77,7 @@ use Guard;
 use Coro;
 use Coro::AnyEvent qw(sleep);
 use Coro::Channel;
-use Coro::ProcessPool::Process;
+use Coro::ProcessPool::Process qw(worker);
 use Coro::ProcessPool::Util;
 use Coro::Semaphore;
 require Coro::ProcessPool::Pipeline;
@@ -214,19 +214,18 @@ sub BUILD {
 
 sub start_proc {
   my $self = shift;
-  my $proc = Coro::ProcessPool::Process->new(include => $self->include);
-  my $pid  = $proc->pid;
+  my $proc = worker(include => $self->include);
+  $proc->await;
   ++$self->{num_procs};
-  $self->{all_procs}{$pid} = $proc;
+  $self->{all_procs}{$proc->pid} = $proc;
   return $proc;
 }
 
 sub kill_proc {
   my ($self, $proc) = @_;
-  my $pid  = $proc->pid;
-  $proc->shutdown;
+  $proc->stop;
   --$self->{num_procs};
-  delete $self->{all_procs}{$pid};
+  delete $self->{all_procs}{$proc->pid};
 }
 
 sub checkin_proc {
@@ -237,13 +236,13 @@ sub checkin_proc {
     return;
   }
 
-  if (!$proc->is_running) {
+  if (!$proc->alive) {
     my $pid = $proc->pid;
     --$self->{num_procs};
     delete $self->{all_procs}{$pid};
     unshift @{$self->procs}, $self->start_proc;
   }
-  elsif ($self->max_reqs && $proc->messages_sent >= $self->max_reqs) {
+  elsif ($self->max_reqs && $proc->{counter} >= $self->max_reqs) {
     $self->kill_proc($proc);
     unshift @{$self->procs}, $self->start_proc;
   }
@@ -290,9 +289,13 @@ sub shutdown {
   my $self = shift;
 
   $self->is_running(0);
-  $_->shutdown(5) foreach values %{$self->{all_procs}};
 
-  $self->{procs}    = [];
+  foreach (values %{$self->{all_procs}}) {
+    $_->stop;
+    $_->join;
+  }
+
+  $self->{procs}      = [];
   $self->{all_proces} = {};
   $self->{num_procs}  = 0;
   $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
@@ -323,9 +326,7 @@ sub process {
   my $guard = $self->procs_lock->guard;
   my $proc  = $self->checkout_proc;
   scope_guard { $self->checkin_proc($proc) };
-
-  my $msgid = $proc->send($f, $args);
-  return $proc->recv($msgid);
+  $proc->send($f, $args)->recv;
 }
 
 =head2 map($f, @args)
