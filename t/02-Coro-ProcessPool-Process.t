@@ -56,4 +56,16 @@ subtest 'multiple' => sub {
   ok !$proc->alive, 'stopped';
 };
 
+subtest 'include' => sub {
+  ok my $proc = worker(include => ['./t']), 'spawn';
+  $proc->await;
+
+  ok my $result = $proc->send('TestTaskNoNS', []), 'send task class';
+  is $result->recv, 42, 'expected result';
+
+  $proc->stop;
+  $proc->join;
+  ok !$proc->alive, 'stopped';
+};
+
 done_testing;

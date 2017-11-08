@@ -18,7 +18,7 @@ sub worker {
   my %param = @_;
   my $inc   = $param{include} // [];
   my $cmd   = get_command_path;
-  my $args  = get_args;
+  my $args  = get_args(@$inc);
   my $exec  = "$cmd $args";
 
   my ($parent_in, $child_out) = portable_pipe;
