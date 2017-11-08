@@ -49,7 +49,7 @@ sub worker {
 
   $proc->{stopped}->cb(sub {
     my $cv = shift;
-    $cv->recv || die 'worker failed to launch';
+    $cv->recv;
     $proc->{in}->close;
     $proc->{out}->close;
   });
@@ -105,12 +105,12 @@ sub alive {
 
 sub stop {
   my $proc = shift;
-  kill('TERM', $proc->{pid}) if $proc->{pid};
+  $proc->send('self-terminate') if $proc->alive;;
 }
 
 sub kill {
   my $proc = shift;
-  kill('KILL', $proc->{pid}) if $proc->{pid};
+  kill('KILL', $proc->{pid}) if $proc->alive;
 }
 
 sub send {

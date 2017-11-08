@@ -15,8 +15,7 @@ my $doubler = sub {
 
 use_ok($class) or BAIL_OUT;
 
-note 'process_task';
-{
+subtest 'process task' => sub {
   my $success = [$class->process_task($doubler, [21])];
   is_deeply($success, [0, 42], 'code ref-based task produces expected result');
 

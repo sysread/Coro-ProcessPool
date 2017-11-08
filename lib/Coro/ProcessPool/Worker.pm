@@ -64,20 +64,6 @@ sub _build_output_monitor {
   } @_;
 }
 
-sub run {
-  my $self = shift;
-  $self->output->print($$ . $EOL);
-
-  while (1) {
-    my $job = $self->queue->get or last;
-    my ($id, $task, $args) = @$job;
-    my ($error, $result) = $self->process_task($task, $args);
-    $self->completed->put([$id, $error, $result]);
-  }
-
-  exit 0;
-}
-
 before run => sub {
   my $self = shift;
   $self->input_monitor;
@@ -110,6 +96,21 @@ sub process_task {
   }
 
   return (0, $result);
+}
+
+sub run {
+  my $self = shift;
+  $self->output->print($$ . $EOL);
+
+  while (1) {
+    my $job = $self->queue->get or last;
+    my ($id, $task, $args) = @$job;
+    last if $task eq 'self-terminate';
+    my ($error, $result) = $self->process_task($task, $args);
+    $self->completed->put([$id, $error, $result]);
+  }
+
+  exit 0;
 }
 
 1;
