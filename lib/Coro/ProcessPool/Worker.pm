@@ -3,6 +3,7 @@ package Coro::ProcessPool::Worker;
 use strict;
 use warnings;
 use Coro;
+use Coro::AnyEvent;
 use Coro::Handle qw(unblock);
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
@@ -14,18 +15,27 @@ sub run {
 
   $out->print($$ . $EOL);
 
-  while (my $line = $in->readline($EOL)) {
-    my @task = decode($line);
+  my $pending = 0;
 
-    if ($task[1] eq 'self-terminate') {
+  while (my $line = $in->readline($EOL)) {
+    my ($id, $task, $args) = decode($line);
+
+    if ($task eq 'self-terminate') {
       last;
     }
+
+    ++$pending;
 
     async_pool {
       my ($out, $id, $task, $args) = @_;
       my ($error, $result) = process_task($task, $args);
       $out->print(encode($id, $error, $result) . $EOL);
-    } $out, @task;
+      --$pending;
+    } $out, $id, $task, $args;
+  }
+
+  while ($pending > 0) {
+    Coro::AnyEvent::idle_upto 1;
   }
 
   $in->close;

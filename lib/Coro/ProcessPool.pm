@@ -63,29 +63,6 @@
 
 Processes tasks using a pool of external Perl processes.
 
-=cut
-
-package Coro::ProcessPool;
-
-# ABSTRACT: An asynchronous process pool
-
-use Moo;
-use Types::Standard qw(-types);
-use Carp;
-use AnyEvent;
-use Guard;
-use Coro;
-use Coro::AnyEvent qw(sleep);
-use Coro::Channel;
-use Coro::ProcessPool::Process qw(worker);
-use Coro::ProcessPool::Util;
-use Coro::Semaphore;
-require Coro::ProcessPool::Pipeline;
-
-if ($^O eq 'MSWin32') {
-  die 'MSWin32 is not supported';
-}
-
 =head1 ATTRIBUTES
 
 =head2 max_procs
@@ -93,40 +70,16 @@ if ($^O eq 'MSWin32') {
 The maximum number of processes to run within the process pool. Defaults
 to the number of CPUs on the ssytem.
 
-=cut
-
-has max_procs => (
-  is      => 'ro',
-  isa     => Int,
-  default => sub { Coro::ProcessPool::Util::cpu_count() },
-);
-
 =head2 max_reqs
 
 The maximum number of tasks a worker process may run before being terminated
 and replaced with a fresh process. This is useful for tasks that might leak
 memory over time.
 
-=cut
-
-has max_reqs => (
-  is      => 'ro',
-  isa     => Int,
-  default => sub { 0 },
-);
-
 =head2 include
 
 An optional array ref of directory paths to prepend to the set of directories
 the worker process will use to find Perl packages.
-
-=cut
-
-has include => (
-  is      => 'ro',
-  isa     => ArrayRef[Str],
-  default => sub { [] },
-);
 
 =head1 PRIVATE ATTRIBUTES
 
@@ -135,173 +88,31 @@ has include => (
 Semaphore used to control access to the worker processes. Starts incremented
 to the number of processes (C<max_procs>).
 
-=cut
-
-has procs_lock => (
-  is  => 'lazy',
-  isa => InstanceOf['Coro::Semaphore'],
-);
-
-sub _build_procs_lock {
-  my $self = shift;
-  return Coro::Semaphore->new($self->max_procs);
-}
-
 =head2 num_procs
 
 Running total of processes that are currently running.
-
-=cut
-
-has num_procs => (
-  is      => 'rw',
-  isa     => Int,
-  default => sub { 0 },
-);
 
 =head2 procs
 
 Array holding the L<Coro::ProcessPool::Process> objects.
 
-=cut
-
-has procs => (
-  is      => 'ro',
-  isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
-  default => sub { [] },
-);
-
 =head2 all_procs
-
-=cut
-
-has all_procs => (
-  is      => 'ro',
-  isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
-  default => sub { {} },
-);
 
 =head2 is_running
 
 Boolean which signals to the instance that the C<shutdown> method has been
 called.
 
-=cut
-
-has is_running => (
-  is      => 'rw',
-  isa     => Bool,
-  default => sub { 1 },
-);
-
 =head1 METHODS
-
-=cut
-
-sub DEMOLISH {
-  my $self = shift;
-  if ($self->is_running) {
-    $self->shutdown;
-  }
-}
-
-sub BUILD {
-  my $self = shift;
-  for (1 .. $self->max_procs) {
-    unshift @{$self->procs}, $self->start_proc;
-  }
-}
-
-sub start_proc {
-  my $self = shift;
-  my $proc = worker(include => $self->include);
-  $proc->await;
-  ++$self->{num_procs};
-  $self->{all_procs}{$proc->pid} = $proc;
-  return $proc;
-}
-
-sub kill_proc {
-  my ($self, $proc) = @_;
-  $proc->stop;
-  --$self->{num_procs};
-  delete $self->{all_procs}{$proc->pid};
-}
-
-sub checkin_proc {
-  my ($self, $proc) = @_;
-
-  unless ($self->is_running) {
-    $self->kill_proc($proc);
-    return;
-  }
-
-  if (!$proc->alive) {
-    my $pid = $proc->pid;
-    --$self->{num_procs};
-    delete $self->{all_procs}{$pid};
-    unshift @{$self->procs}, $self->start_proc;
-  }
-  elsif ($self->max_reqs && $proc->{counter} >= $self->max_reqs) {
-    $self->kill_proc($proc);
-    unshift @{$self->procs}, $self->start_proc;
-  }
-  else {
-    unshift @{$self->procs}, $proc;
-  }
-}
-
-sub checkout_proc {
-  my $self = shift;
-  croak 'not running' unless $self->is_running;
-
-  my $proc;
-
-  # Start a new process if none are available and there are worker slots open
-  if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
-    $proc = $self->start_proc;
-  } else {
-    $proc = shift @{$self->procs};
-  }
-
-  return $proc;
-}
 
 =head2 capacity
 
 Returns the number of free worker processes.
 
-=cut
-
-sub capacity {
-  my $self = shift;
-  return scalar(@{$self->procs});
-}
-
 =head2 shutdown
 
 Shuts down all processes and resets state on the process pool. After calling
 this method, the pool is effectively in a new state and may be used normally.
-
-=cut
-
-sub shutdown {
-  my $self = shift;
-
-  $self->is_running(0);
-
-  foreach (values %{$self->{all_procs}}) {
-    $_->stop;
-    $_->join;
-  }
-
-  $self->{procs}      = [];
-  $self->{all_proces} = {};
-  $self->{num_procs}  = 0;
-  $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
-
-  return;
-}
 
 =head2 process($f, $args)
 
@@ -319,16 +130,6 @@ busy, this method will block until one becomes available. Processes are spawned
 as needed, up to C<max_procs>, from this method. Also note that the use of
 C<max_reqs> can cause this method to yield while a new process is spawned.
 
-=cut
-
-sub process {
-  my ($self, $f, $args) = @_;
-  my $guard = $self->procs_lock->guard;
-  my $proc  = $self->checkout_proc;
-  scope_guard { $self->checkin_proc($proc) };
-  $proc->send($f, $args)->recv;
-}
-
 =head2 map($f, @args)
 
 Applies C<$f> to each value in C<@args> in turn and returns a list of the
@@ -337,14 +138,6 @@ guaranteed, the results are guaranteed to be in the same order as C<@args>,
 even if the result of calling C<$f> returns a list itself (in which case, the
 results of that calcuation is flattened into the list returned by C<map>.
 
-=cut
-
-sub map {
-  my ($self, $f, @args) = @_;
-  my @deferred = map { $self->defer($f, [$_]) } @args;
-  return map { $_->() } @deferred;
-}
-
 =head2 defer($f, $args)
 
 Similar to L<./process>, but returns immediately. The return value is a code
@@ -352,22 +145,6 @@ reference that, when called, returns the results of calling C<$f->(@$args)>.
 
   my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
   my $result   = $deferred->();
-
-=cut
-
-sub defer {
-  my $self = shift;
-  my $cv   = AnyEvent->condvar;
-
-  async_pool {
-    my ($self, $cv, @args) = @_;
-    my $result = eval { $self->process(@args) };
-    $cv->croak($@) if $@;
-    $cv->send($result);
-  } $self, $cv, @_;
-
-  return sub { $cv->recv };
-}
 
 =head2 pipeline
 
@@ -397,13 +174,6 @@ which may be created for a pool.
 If the pool is shutdown while the pipeline is active, any tasks pending in
 L<Coro::ProcessPool::Pipeline/next> will fail and cause the next call to
 C<next()> to croak.
-
-=cut
-
-sub pipeline {
-  my $self = shift;
-  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
-}
 
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
 
@@ -482,5 +252,212 @@ process pool on Windows:
 =back
 
 =cut
+
+package Coro::ProcessPool;
+
+# ABSTRACT: An asynchronous process pool
+
+use Moo;
+use Types::Standard qw(-types);
+use Carp;
+use AnyEvent;
+use Guard;
+use Coro;
+use Coro::AnyEvent qw(sleep);
+use Coro::Channel;
+use Coro::ProcessPool::Process qw(worker);
+use Coro::ProcessPool::Util;
+use Coro::Semaphore;
+require Coro::ProcessPool::Pipeline;
+
+if ($^O eq 'MSWin32') {
+  die 'MSWin32 is not supported';
+}
+
+has max_procs => (
+  is      => 'ro',
+  isa     => Int,
+  default => sub { Coro::ProcessPool::Util::cpu_count() },
+);
+
+has max_reqs => (
+  is      => 'ro',
+  isa     => Int,
+  default => sub { 0 },
+);
+
+has include => (
+  is      => 'ro',
+  isa     => ArrayRef[Str],
+  default => sub { [] },
+);
+
+has procs_lock => (
+  is  => 'lazy',
+  isa => InstanceOf['Coro::Semaphore'],
+);
+
+sub _build_procs_lock {
+  my $self = shift;
+  return Coro::Semaphore->new($self->max_procs);
+}
+
+has num_procs => (
+  is      => 'rw',
+  isa     => Int,
+  default => sub { 0 },
+);
+
+has procs => (
+  is      => 'ro',
+  isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
+  default => sub { [] },
+);
+
+has all_procs => (
+  is      => 'ro',
+  isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
+  default => sub { {} },
+);
+
+has is_running => (
+  is      => 'rw',
+  isa     => Bool,
+  default => sub { 1 },
+);
+
+
+sub DEMOLISH {
+  my $self = shift;
+  if ($self->is_running) {
+    $self->shutdown;
+  }
+}
+
+sub BUILD {
+  my $self = shift;
+  for (1 .. $self->max_procs) {
+    unshift @{$self->procs}, $self->start_proc;
+  }
+}
+
+sub start_proc {
+  my $self = shift;
+  my $proc = worker(include => $self->include);
+  $proc->await;
+  ++$self->{num_procs};
+  $self->{all_procs}{$proc->pid} = $proc;
+  return $proc;
+}
+
+sub kill_proc {
+  my ($self, $proc) = @_;
+
+  delete $self->{all_procs}{$proc->pid};
+  --$self->{num_procs};
+
+  async_pool {
+    $proc->stop;
+    $proc->join;
+  };
+}
+
+sub checkin_proc {
+  my ($self, $proc) = @_;
+
+  unless ($self->is_running) {
+    $self->kill_proc($proc);
+    return;
+  }
+
+  if (!$proc->alive || ($self->max_reqs && $proc->{counter} >= $self->max_reqs)) {
+    $self->kill_proc($proc);
+    unshift @{$self->procs}, $self->start_proc;
+  }
+  else {
+    unshift @{$self->procs}, $proc;
+  }
+}
+
+sub checkout_proc {
+  my $self = shift;
+  croak 'not running' unless $self->is_running;
+
+  my $proc;
+
+  # Start a new process if none are available and there are worker slots open
+  if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
+    $proc = $self->start_proc;
+  } else {
+    $proc = shift @{$self->procs};
+  }
+
+  return $proc;
+}
+
+sub capacity {
+  my $self = shift;
+  return scalar(@{$self->procs});
+}
+
+sub shutdown {
+  my $self = shift;
+
+  $self->is_running(0);
+
+  $self->kill_proc($_)
+    foreach values %{$self->{all_procs}};
+
+  $self->{procs}      = [];
+  $self->{all_proces} = {};
+  $self->{num_procs}  = 0;
+  $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
+
+  return;
+}
+
+sub process {
+  my ($self, $f, $args) = @_;
+  my $guard = $self->procs_lock->guard;
+  my $proc  = $self->checkout_proc;
+  scope_guard { $self->checkin_proc($proc) };
+  $proc->send($f, $args)->recv;
+}
+
+sub map {
+  my ($self, $f, @args) = @_;
+  my @deferred = map { $self->defer($f, [$_]) } @args;
+  return map { $_->() } @deferred;
+}
+
+sub defer {
+  my ($self, $f, $args) = @_;
+  my $guard = $self->procs_lock->guard;
+  my $proc  = $self->checkout_proc;
+  scope_guard { $self->checkin_proc($proc) };
+  my $cv = $proc->send($f, $args);
+  return sub{ $cv->recv };
+}
+
+=cut
+sub defer {
+  my $self = shift;
+  my $cv   = AnyEvent->condvar;
+
+  async_pool {
+    my ($self, $cv, @args) = @_;
+    my $result = eval { $self->process(@args) };
+    $cv->croak($@) if $@;
+    $cv->send($result);
+  } $self, $cv, @_;
+
+  return sub { $cv->recv };
+}
+=cut
+
+sub pipeline {
+  my $self = shift;
+  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
+}
 
 1;
