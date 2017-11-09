@@ -1,4 +1,5 @@
 package Coro::ProcessPool::Process;
+# ABSTRACT Manager for worker subprocess
 
 use strict;
 use warnings;
