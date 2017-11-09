@@ -356,10 +356,8 @@ sub kill_proc {
   delete $self->{all_procs}{$proc->pid};
   --$self->{num_procs};
 
-  async_pool {
-    $proc->stop;
-    $proc->join;
-  };
+  $proc->stop;
+  async_pool { shift->join } $proc;
 }
 
 sub checkin_proc {
