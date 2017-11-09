@@ -2,6 +2,7 @@ package Coro::ProcessPool::Process;
 
 use strict;
 use warnings;
+use Carp;
 use Coro;
 use Coro::Countdown;
 use Data::UUID;
@@ -24,16 +25,13 @@ sub worker {
 
   my ($child_in, $parent_out)  = portable_pipe;
   my ($parent_in, $child_out)  = portable_pipe;
-  my ($parent_err, $child_err) = portable_pipe;
 
   my $proc = bless {
     pid     => undef,
     in      => unblock($parent_in),
     out     => unblock($parent_out),
-    err     => unblock($parent_err),
     inbox   => {},
     reader  => undef,
-    monitor => undef,
     stopped => undef,
     started => AE::cv,
     counter => 0,
@@ -45,21 +43,16 @@ sub worker {
     '$$' => \$proc->{pid},
     '>'  => $child_out,
     '<'  => $child_in,
-    '2>' => $child_err,
+    '2>' => sub {
+      my $err = shift or return;
+      warn "[worker pid:$proc->{pid}] $err\n";
+    },
   );
 
   $proc->{stopped}->cb(sub {
     $proc->{in}->close;
     $proc->{out}->close;
   });
-  
-  $proc->{monitor} = async {
-    my $proc = shift;
-
-    while (my $err = $proc->{err}->readline) {
-      warn "[worker pid:$proc->{pid}] $err\n";
-    }
-  } $proc;
 
   $proc->{reader} = async {
     my $proc = shift;
@@ -92,7 +85,10 @@ sub worker {
   return $proc;
 }
 
-sub pid { $_[0]->{pid} }
+sub pid {
+  my $proc = shift;
+  return $proc->{pid};
+}
 
 sub await {
   my $proc = shift;
@@ -129,16 +125,14 @@ sub kill {
 
 sub send {
   my ($proc, $f, $args) = @_;
+  croak 'subprocess is not running' unless $proc->alive;
 
   # Add a watcher to the inbox for this task
   my $id = Data::UUID->new->create_str;
   $proc->{inbox}{$id} = AE::cv;
 
   # Send the task to the worker
-  async_pool {
-    my ($proc, $id, $f, $args) = @_;
-    $proc->{out}->print(encode($id, $f, $args || []) . $EOL);
-  } $proc, $id, $f, $args;
+  $proc->{out}->print(encode($id, $f, $args || []) . $EOL);
 
   ++$proc->{counter};
   $proc->{pending}->up;

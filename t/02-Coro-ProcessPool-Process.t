@@ -68,4 +68,25 @@ subtest 'include' => sub {
   ok !$proc->alive, 'stopped';
 };
 
+subtest 'join' => sub {
+  ok my $proc = worker, 'spawn';
+  $proc->await;
+
+  my %result;
+  async {
+    my ($cv1, $cv2, $cv3) = @_;
+    $result{1} = $cv1->recv;
+    $result{2} = $cv2->recv;
+    $result{3} = $cv3->recv;
+  } $proc->send(\&double, [1]),
+    $proc->send(\&double, [2]),
+    $proc->send(\&double, [3]);
+
+  $proc->stop;
+  $proc->join;
+  ok !$proc->alive, 'stopped';
+
+  is \%result, {1 => 2, 2 => 4, 3 => 6}, 'result';
+};
+
 done_testing;

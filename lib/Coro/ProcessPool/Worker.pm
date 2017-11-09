@@ -3,7 +3,7 @@ package Coro::ProcessPool::Worker;
 use strict;
 use warnings;
 use Coro;
-use Coro::AnyEvent;
+use Coro::Countdown;
 use Coro::Handle qw(unblock);
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
@@ -15,7 +15,7 @@ sub run {
 
   $out->print($$ . $EOL);
 
-  my $pending = 0;
+  my $pending = new Coro::Countdown;
 
   while (my $line = $in->readline($EOL)) {
     my ($id, $task, $args) = decode($line);
@@ -24,22 +24,20 @@ sub run {
       last;
     }
 
-    ++$pending;
+    $pending->up;
 
     async_pool {
       my ($out, $id, $task, $args) = @_;
       my ($error, $result) = process_task($task, $args);
       $out->print(encode($id, $error, $result) . $EOL);
-      --$pending;
+      $pending->down;
     } $out, $id, $task, $args;
   }
 
-  while ($pending > 0) {
-    Coro::AnyEvent::idle_upto 1;
-  }
+  $pending->join;
 
-  $in->close;
-  $out->close;
+  $in->shutdown;
+  $out->shutdown;
   exit 0;
 }
 
