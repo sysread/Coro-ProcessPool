@@ -106,7 +106,6 @@ subtest 'process' => sub {
   is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
-=cut
 subtest 'defer' => sub {
   my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
   my $count = 10;
@@ -134,7 +133,6 @@ subtest 'map' => sub {
   $pool->shutdown;
   is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
-=cut
 
 subtest 'task errors' => sub {
   my $pool = new_ok($class, [max_procs => 2, max_reqs => 3]) or BAIL_OUT 'Failed to create class';
