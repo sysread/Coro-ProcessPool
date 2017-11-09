@@ -17,6 +17,8 @@ use Coro::ProcessPool::Util qw(get_command_path get_args encode decode $EOL);
 use parent 'Exporter';
 our @EXPORT_OK = qw(worker);
 
+my $UUID = Data::UUID->new;
+
 sub worker {
   my %param = @_;
   my $inc   = $param{include} // [];
@@ -129,7 +131,7 @@ sub send {
   croak 'subprocess is not running' unless $proc->alive;
 
   # Add a watcher to the inbox for this task
-  my $id = Data::UUID->new->create_str;
+  my $id = $UUID->create_str;
   $proc->{inbox}{$id} = AE::cv;
 
   # Send the task to the worker
