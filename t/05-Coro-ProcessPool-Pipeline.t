@@ -7,7 +7,7 @@ use List::Util qw(shuffle);
 use Test::More;
 use Coro::ProcessPool;
 
-die 'MSWin32 is not supported' if $^O eq 'MSWin32';
+BAIL_OUT 'OS unsupported' if $^O eq 'MSWin32';
 
 my $class = 'Coro::ProcessPool::Pipeline';
 use_ok($class);

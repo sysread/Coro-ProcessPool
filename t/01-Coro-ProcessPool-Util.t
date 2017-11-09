@@ -6,7 +6,7 @@ use Coro::ProcessPool::Util qw(
   decode
 );
 
-die 'MSWin32 is not supported' if $^O eq 'MSWin32';
+bail_out 'OS unsupported' if $^O eq 'MSWin32';
 
 subtest 'encode/decode' => sub{
   my @data = ('ABCD', 42, [qw(thanks for all the fish)]);

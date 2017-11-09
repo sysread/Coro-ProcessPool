@@ -1,5 +1,5 @@
 package Coro::ProcessPool::Worker;
-# ABSTRACT Run loop for worker process
+# ABSTRACT: Run loop for worker process
 
 use strict;
 use warnings;

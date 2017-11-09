@@ -5,7 +5,7 @@ use Coro;
 use Coro::Timer qw(timeout);
 use Coro::ProcessPool::Process qw(worker);
 
-die 'MSWin32 is not supported' if $^O eq 'MSWin32';
+bail_out 'OS unsupported' if $^O eq 'MSWin32';
 
 sub double { $_[0] * 2 }
 

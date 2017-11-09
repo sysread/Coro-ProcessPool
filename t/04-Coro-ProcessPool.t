@@ -9,7 +9,7 @@ use Guard;
 use Coro::Channel;
 use Sub::Override;
 
-die 'MSWin32 is not supported' if $^O eq 'MSWin32';
+BAIL_OUT 'OS unsupported' if $^O eq 'MSWin32';
 
 my $class = 'Coro::ProcessPool';
 

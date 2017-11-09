@@ -4,7 +4,7 @@ use Test::More;
 use Coro;
 use Coro::AnyEvent;
 
-die 'MSWin32 is not supported' if $^O eq 'MSWin32';
+BAIL_OUT 'OS unsupported' if $^O eq 'MSWin32';
 
 use Coro::ProcessPool::Worker;
 
