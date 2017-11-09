@@ -7,9 +7,9 @@ use Carp;
 use Config;
 use Const::Fast;
 use Data::Dump::Streamer;
-use MIME::Base64  qw(encode_base64 decode_base64);
+use MIME::Base64 qw(encode_base64 decode_base64);
 use String::Escape  qw(backslash);
-use Sereal::Encoder qw(sereal_encode_with_object SRL_SNAPPY);
+use Sereal::Encoder qw(sereal_encode_with_object);
 use Sereal::Decoder qw(sereal_decode_with_object);
 
 use parent 'Exporter';
@@ -24,7 +24,6 @@ our @EXPORT_OK = qw(
 );
 
 const our $EOL => "\n";
-const our $DEFAULT_READ_TIMEOUT => 0.1;
 
 my $ENCODER = Sereal::Encoder->new();
 my $DECODER = Sereal::Decoder->new();
