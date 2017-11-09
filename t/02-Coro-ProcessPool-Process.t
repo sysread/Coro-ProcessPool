@@ -9,13 +9,7 @@ die 'MSWin32 is not supported' if $^O eq 'MSWin32';
 
 sub double { $_[0] * 2 }
 
-sub timed {
-  my $flag = timeout 10;
-  subtest @_;
-  ok !$flag, 'timeout';
-}
-
-timed 'start/stop' => sub {
+subtest 'start/stop' => sub {
   ok my $proc = worker, 'spawn';
   ok !$proc->alive, 'prenatal';
 
@@ -27,7 +21,7 @@ timed 'start/stop' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-timed 'send/recv' => sub {
+subtest 'send/recv' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -42,7 +36,7 @@ timed 'send/recv' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-timed 'multiple' => sub {
+subtest 'multiple' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -63,7 +57,7 @@ timed 'multiple' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-timed 'include' => sub {
+subtest 'include' => sub {
   ok my $proc = worker(include => ['./t']), 'spawn';
   $proc->await;
 
@@ -75,7 +69,7 @@ timed 'include' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-timed 'join' => sub {
+subtest 'join' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 

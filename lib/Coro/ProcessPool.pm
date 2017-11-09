@@ -430,6 +430,7 @@ sub map {
   return map { $_->() } @deferred;
 }
 
+=cut
 sub defer {
   my ($self, $f, $args) = @_;
   my $guard = $self->procs_lock->guard;
@@ -438,8 +439,8 @@ sub defer {
   my $cv = $proc->send($f, $args);
   return sub{ $cv->recv };
 }
-
 =cut
+
 sub defer {
   my $self = shift;
   my $cv   = AnyEvent->condvar;
@@ -453,7 +454,6 @@ sub defer {
 
   return sub { $cv->recv };
 }
-=cut
 
 sub pipeline {
   my $self = shift;

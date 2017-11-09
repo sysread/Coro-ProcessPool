@@ -263,16 +263,6 @@ process pool on Windows:
 
 =back
 
-  async_pool {
-    my ($self, $cv, @args) = @_;
-    my $result = eval { $self->process(@args) };
-    $cv->croak($@) if $@;
-    $cv->send($result);
-  } $self, $cv, @_;
-
-  return sub { $cv->recv };
-}
-
 =head1 AUTHOR
 
 Jeff Ober <sysread@fastmail.fm>
