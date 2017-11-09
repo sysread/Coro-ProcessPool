@@ -2,13 +2,20 @@ use strict;
 use warnings;
 use Test2::Bundle::Extended;
 use Coro;
+use Coro::Timer qw(timeout);
 use Coro::ProcessPool::Process qw(worker);
 
 die 'MSWin32 is not supported' if $^O eq 'MSWin32';
 
 sub double { $_[0] * 2 }
 
-subtest 'start/stop' => sub {
+sub timed {
+  my $flag = timeout 10;
+  subtest @_;
+  ok !$flag, 'timeout';
+}
+
+timed 'start/stop' => sub {
   ok my $proc = worker, 'spawn';
   ok !$proc->alive, 'prenatal';
 
@@ -20,7 +27,7 @@ subtest 'start/stop' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'send/recv' => sub {
+timed 'send/recv' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -35,7 +42,7 @@ subtest 'send/recv' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'multiple' => sub {
+timed 'multiple' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -56,7 +63,7 @@ subtest 'multiple' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'include' => sub {
+timed 'include' => sub {
   ok my $proc = worker(include => ['./t']), 'spawn';
   $proc->await;
 
@@ -68,7 +75,7 @@ subtest 'include' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'join' => sub {
+timed 'join' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
