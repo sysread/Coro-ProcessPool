@@ -430,20 +430,9 @@ sub map {
   return map { $_->() } @deferred;
 }
 
-=cut
-sub defer {
-  my ($self, $f, $args) = @_;
-  my $guard = $self->procs_lock->guard;
-  my $proc  = $self->checkout_proc;
-  scope_guard { $self->checkin_proc($proc) };
-  my $cv = $proc->send($f, $args);
-  return sub{ $cv->recv };
-}
-=cut
-
 sub defer {
   my $self = shift;
-  my $cv   = AnyEvent->condvar;
+  my $cv = AnyEvent->condvar;
 
   async_pool {
     my ($self, $cv, @args) = @_;
@@ -452,7 +441,7 @@ sub defer {
     $cv->send($result);
   } $self, $cv, @_;
 
-  return sub { $cv->recv };
+  return sub{ $cv->recv };
 }
 
 sub pipeline {
