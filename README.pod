@@ -95,21 +95,6 @@ the worker process will use to find Perl packages.
 
 =head1 PRIVATE ATTRIBUTES
 
-=head2 procs_lock
-
-Semaphore used to control access to the worker processes. Starts incremented
-to the number of processes (C<max_procs>).
-
-=head2 num_procs
-
-Running total of processes that are currently running.
-
-=head2 procs
-
-Array holding the L<Coro::ProcessPool::Process> objects.
-
-=head2 all_procs
-
 =head2 is_running
 
 Boolean which signals to the instance that the C<shutdown> method has been

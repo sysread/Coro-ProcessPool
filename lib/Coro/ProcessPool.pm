@@ -83,21 +83,6 @@ the worker process will use to find Perl packages.
 
 =head1 PRIVATE ATTRIBUTES
 
-=head2 procs_lock
-
-Semaphore used to control access to the worker processes. Starts incremented
-to the number of processes (C<max_procs>).
-
-=head2 num_procs
-
-Running total of processes that are currently running.
-
-=head2 procs
-
-Array holding the L<Coro::ProcessPool::Process> objects.
-
-=head2 all_procs
-
 =head2 is_running
 
 Boolean which signals to the instance that the C<shutdown> method has been
@@ -264,7 +249,6 @@ use AnyEvent;
 use Guard;
 use Coro;
 use Coro::AnyEvent qw(sleep);
-use Coro::Channel;
 use Coro::ProcessPool::Process qw(worker);
 use Coro::ProcessPool::Util;
 use Coro::Semaphore;
@@ -292,40 +276,25 @@ has include => (
   default => sub { [] },
 );
 
-has procs_lock => (
-  is  => 'lazy',
-  isa => InstanceOf['Coro::Semaphore'],
+has pschan => (
+  is => 'lazy',
+  isa => InstanceOf['Coro::Channel'],
+  handles => {
+    checkout_proc => 'get',
+    checkin_proc  => 'put',
+  },
 );
 
-sub _build_procs_lock {
+sub _build_pschan {
   my $self = shift;
-  return Coro::Semaphore->new($self->max_procs);
+  Coro::Channel->new($self->max_procs + 1);
 }
-
-has num_procs => (
-  is      => 'rw',
-  isa     => Int,
-  default => sub { 0 },
-);
-
-has procs => (
-  is      => 'ro',
-  isa     => ArrayRef[InstanceOf['Coro::ProcessPool::Process']],
-  default => sub { [] },
-);
-
-has all_procs => (
-  is      => 'ro',
-  isa     => HashRef[InstanceOf['Coro::ProcessPool::Process']],
-  default => sub { {} },
-);
 
 has is_running => (
   is      => 'rw',
   isa     => Bool,
   default => sub { 1 },
 );
-
 
 sub DEMOLISH {
   my $self = shift;
@@ -337,7 +306,7 @@ sub DEMOLISH {
 sub BUILD {
   my $self = shift;
   for (1 .. $self->max_procs) {
-    unshift @{$self->procs}, $self->start_proc;
+    $self->pschan->put($self->start_proc);
   }
 }
 
@@ -345,23 +314,24 @@ sub start_proc {
   my $self = shift;
   my $proc = worker(include => $self->include);
   $proc->await;
-  ++$self->{num_procs};
-  $self->{all_procs}{$proc->pid} = $proc;
   return $proc;
 }
 
 sub kill_proc {
   my ($self, $proc) = @_;
-
-  delete $self->{all_procs}{$proc->pid};
-  --$self->{num_procs};
-
   $proc->stop;
-  async_pool { shift->join } $proc;
+  $proc->join;
 }
 
-sub checkin_proc {
-  my ($self, $proc) = @_;
+before [qw(start_proc checkout_proc queue)] => sub {
+  my $self = shift;
+  die 'not running' unless $self->is_running;
+};
+
+around checkin_proc => sub {
+  my $orig = shift;
+  my $self = shift;
+  my $proc = shift;
 
   unless ($self->is_running) {
     $self->kill_proc($proc);
@@ -370,76 +340,51 @@ sub checkin_proc {
 
   if (!$proc->alive || ($self->max_reqs && $proc->{counter} >= $self->max_reqs)) {
     $self->kill_proc($proc);
-    unshift @{$self->procs}, $self->start_proc;
+    $self->$orig( $self->start_proc );
   }
   else {
-    unshift @{$self->procs}, $proc;
+    $self->$orig($proc);
   }
-}
-
-sub checkout_proc {
-  my $self = shift;
-  croak 'not running' unless $self->is_running;
-
-  my $proc;
-
-  # Start a new process if none are available and there are worker slots open
-  if ($self->capacity == 0 && $self->num_procs < $self->max_procs) {
-    $proc = $self->start_proc;
-  } else {
-    $proc = shift @{$self->procs};
-  }
-
-  return $proc;
-}
+};
 
 sub capacity {
   my $self = shift;
-  return scalar(@{$self->procs});
+  $self->max_procs - ($self->max_procs - $self->pschan->size);
 }
 
 sub shutdown {
   my $self = shift;
 
+  $self->pschan->shutdown;
+
+  while (my $proc = $self->checkout_proc) {
+    $self->kill_proc($proc);
+  }
+
   $self->is_running(0);
-
-  $self->kill_proc($_)
-    foreach values %{$self->{all_procs}};
-
-  $self->{procs}      = [];
-  $self->{all_proces} = {};
-  $self->{num_procs}  = 0;
-  $self->{procs_lock} = Coro::Semaphore->new($self->max_procs);
 
   return;
 }
 
-sub process {
+sub queue {
   my ($self, $f, $args) = @_;
-  my $guard = $self->procs_lock->guard;
-  my $proc  = $self->checkout_proc;
+  my $proc = $self->checkout_proc;
   scope_guard { $self->checkin_proc($proc) };
-  $proc->send($f, $args)->recv;
+  $proc->send($f, $args);
+}
+
+sub process { shift->queue(@_)->recv }
+
+sub defer {
+  my $self = shift;
+  my $cv = $self->queue(@_);
+  return sub{ $cv->recv };
 }
 
 sub map {
   my ($self, $f, @args) = @_;
   my @deferred = map { $self->defer($f, [$_]) } @args;
   return map { $_->() } @deferred;
-}
-
-sub defer {
-  my $self = shift;
-  my $cv = AnyEvent->condvar;
-
-  async_pool {
-    my ($self, $cv, @args) = @_;
-    my $result = eval { $self->process(@args) };
-    $cv->croak($@) if $@;
-    $cv->send($result);
-  } $self, $cv, @_;
-
-  return sub{ $cv->recv };
 }
 
 sub pipeline {

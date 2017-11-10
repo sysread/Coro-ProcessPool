@@ -24,9 +24,8 @@ subtest 'start & stop' => sub {
   my $cpus   = 1;
   my $override = Sub::Override->new('Coro::ProcessPool::Util::cpu_count' => sub { $cpus });
   my $pool = new_ok($class) or BAIL_OUT 'Failed to create class';
-  is($pool->{max_procs}, $cpus, "max procs set automatically to number of cpus ($cpus)");
+  is($pool->max_procs, $cpus, "max procs set automatically to number of cpus ($cpus)");
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
 };
 
 subtest 'checkout_proc' => sub {
@@ -40,17 +39,14 @@ subtest 'checkout_proc' => sub {
   isa_ok($proc, 'Coro::ProcessPool::Process');
   ok(defined $proc->pid, 'new process has a pid');
 
-  is($pool->num_procs, 1, 'process count correct');
   is($pool->capacity, 0, 'capacity correct');
 
   $pool->checkin_proc($proc);
   is($pool->capacity, 1, 'capacity correct');
-  is($pool->num_procs, 1, 'correct process count');
 
   # Checkout after process started
   $proc = $pool->checkout_proc;
   is($pool->capacity, 0, 'correct capacity');
-  is($pool->num_procs, 1, 'correct process count');
 
   ok(defined $proc, 'previously spawned process acquired');
   isa_ok($proc, 'Coro::ProcessPool::Process');
@@ -60,7 +56,6 @@ subtest 'checkout_proc' => sub {
 
   # Shutdown
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown') or BAIL_OUT('say not to zombies');
 
   eval { $pool->checkout_proc };
   like($@, qr/not running/, 'checkout after shutdown throws error');
@@ -89,7 +84,6 @@ subtest 'max reqs' => sub {
   $pool->checkin_proc($proc);
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'process' => sub {
@@ -103,7 +97,6 @@ subtest 'process' => sub {
   }
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'defer' => sub {
@@ -116,11 +109,10 @@ subtest 'defer' => sub {
   }
 
   foreach my $i (1 .. $count) {
-    is($result{$i}->(), $i * 2, 'expected result');
+    is($result{$i}->(), $i * 2, "expected result $i");
   }
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'map' => sub {
@@ -131,7 +123,6 @@ subtest 'map' => sub {
   is_deeply(\@actual, \@expected, 'expected result');
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'task errors' => sub {
@@ -147,7 +138,6 @@ subtest 'task errors' => sub {
   ok($error, 'processing failure croaks');
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 subtest 'two pools' => sub {
@@ -167,10 +157,8 @@ subtest 'two pools' => sub {
   }
 
   $pool2->shutdown;
-  is($pool2->{num_procs}, 0, 'no processes after shutdown');
 
   $pool->shutdown;
-  is($pool->{num_procs}, 0, 'no processes after shutdown');
 };
 
 SKIP: {
@@ -202,7 +190,6 @@ SKIP: {
     }
 
     $pool->shutdown;
-    is($pool->{num_procs}, 0, 'no processes after shutdown');
   };
 };
 
