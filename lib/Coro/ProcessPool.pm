@@ -228,20 +228,43 @@ thread is responsible for shutting down the pool.
 
 =head2 defer
 
-Queues a task to be processed by the pool. Tasks may come in two forms, as a
-code ref or the fully qualified name of a perl class which implements two
-methods, C<new> and C<run>.
+Queues a task to be processed by the pool. Tasks may specified in either of two
+forms, as a code ref or the fully qualified name of a perl class which
+implements two methods, C<new> and C<run>. Any remaining arguments to C<defer>
+are passed unchanged to the code ref or the C<new> method of the task class.
+
+C<defer> will immediately return an L<AnyEvent/condvar> that will wait for and
+return the result of the task (or croak if the task generated an error).
+
+  # Using a code ref
+  my $cv = $pool->defer(\&func, $arg1, $arg2, $arg3);
+  my $result = $cv->recv;
+
+  # With a task class
+  my $cv = $pool->defer('Some::Task::Class', $arg1, $arg2, $arg3);
+  my $result = $cv->recv;
 
 =head2 process
 
+Calls defer and immediately calls C<recv> on the returned condvar, returning
+the result. This is useful if your workflow includes multiple threads which
+share the same pool. All arguments are passed unchanged to C<defer>.
+
 =head2 map
+
+Like perl's C<map>, applies a code ref to a list of arguments. This method will
+cede until all results have been returned by the pool, returning the result as
+a list. The order of arguments and results is preserved as expected.
+
+  my @results = $pool->map(\&func, $arg1, $arg2, $arg3);
 
 =head2 pipeline
 
 Returns a L<Coro::ProcessPool::Pipeline> object which can be used to pipe
 requests through to the process pool. Results then come out the other end of
-the pipe. It is up to the calling code to perform task account (for example, by
-passing an id in as one of the arguments to the task class).
+the pipe, not necessarily in the order in which they were queued. It is up to
+the calling code to perform task accounting (for example, by passing an id in
+as one of the arguments to the task class).
 
   my $pipe = $pool->pipeline;
 
@@ -261,25 +284,22 @@ All arguments to C<pipeline()> are passed transparently to the constructor of
 L<Coro::ProcessPool::Pipeline>. There is no limit to the number of pipelines
 which may be created for a pool.
 
-If the pool is shutdown while the pipeline is active, any tasks pending in
-L<Coro::ProcessPool::Pipeline/next> will fail and cause the next call to
-C<next()> to croak.
-
 =head1 A NOTE ABOUT IMPORTS AND CLOSURES
 
 Code refs are serialized using L<Data::Dump::Streamer>, allowing closed over
-variables to be available to the code being called in the sub-process. Note
-that mutated variables are I<not> updated when the result is returned.
+variables to be available to the code being called in the sub-process. Mutated
+variables are I<not> updated when the result is returned.
 
 See L<Data::Dump::Streamer/Caveats-Dumping-Closures-(CODE-Refs)> for important
 notes regarding closures.
 
 =head2 Use versus require
 
-The C<use> pragma is run a compile time, whereas C<require> is evaluated at
+The C<use> pragma is run at compile time, whereas C<require> is evaluated at
 runtime. Because of this, the use of C<use> in code passed directly to the
-C<process> method can fail because the C<use> statement has already been
-evaluated when the calling code was compiled.
+C<process> method can fail in the worker process because the C<use> statement
+has already been evaluated in the parent process when the calling code was
+compiled.
 
 This will not work:
 
@@ -297,7 +317,8 @@ This will work:
 
 If C<use> is necessary (for example, to import a method or transform the
 calling code via import), it is recommended to move the code into its own
-module, which can then be called in the anonymous routine:
+module (or to expliticly call require and import in the subroutine), which can
+then be called in the anonymous routine:
 
   package Bar;
 
@@ -314,11 +335,10 @@ Then, in your caller:
     Bar::dostuff();
   });
 
-=head2 If it's a problem...
+Alternately, a task class may be used if dependency management is causing a
+headaches:
 
-Use the task class method if the loading requirements are causing headaches:
-
-  my $result = $pool->process('Task::Class', [@args]);
+  my $result = $pool->process('Task::Class', @args);
 
 =head1 COMPATIBILITY
 
@@ -338,6 +358,16 @@ process pool on Windows:
 =item L<Win32::IPC>
 
 =item L<Win32::Pipe>
+
+=back
+
+=head1 SEE ALSO
+
+=over
+
+=item L<Coro>
+
+=item L<AnyEvent/condvar>
 
 =back
 

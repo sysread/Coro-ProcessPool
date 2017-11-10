@@ -14,7 +14,9 @@
     large arguments. Note that this has implications for the map method, which
     now behaves more like perl's map.
   - Coro::ProcessPool->shutdown no longer leaves the pool in a usable state;
-    start a new pool instead.
+    start a new pool instead. This change also impacts any pipelines using the
+    pool (previously, the attempting to queue a task to a pipeline configured
+    for a pool which had been shutdown would croak).
 
 0.26 2015-06-09
 - More reliable process management

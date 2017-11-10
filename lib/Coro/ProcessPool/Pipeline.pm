@@ -140,14 +140,6 @@ sub queue {
   croak 'pipeline is shut down' if $self->is_shutdown;
   croak 'pipeline is shutting down' if $self->shutting_down;
 
-#  unless ($self->pool->is_running) {
-#    unless ($self->is_shutdown || $self->shutting_down) {
-#      $self->shutdown;
-#    }
-#
-#    croak 'pool is not running';
-#  }
-
   my $deferred = $self->pool->defer(@args);
 
   async_pool {

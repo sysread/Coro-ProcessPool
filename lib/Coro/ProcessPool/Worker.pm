@@ -4,7 +4,6 @@ package Coro::ProcessPool::Worker;
 use strict;
 use warnings;
 use Coro;
-use Coro::Countdown;
 use Coro::Handle qw(unblock);
 use Coro::ProcessPool::Util qw($EOL decode encode);
 use Module::Load qw(load);
@@ -16,8 +15,6 @@ sub run {
 
   $out->print($$ . $EOL);
 
-  #my $pending = new Coro::Countdown;
-
   while (my $line = $in->readline($EOL)) {
     my ($id, $task, $args) = decode($line);
 
@@ -25,13 +22,9 @@ sub run {
       last;
     }
 
-    #$pending->up;
     my ($error, $result) = process_task($task, $args);
     $out->print(encode($id, $error, $result) . $EOL);
-    #$pending->down;
   }
-
-  #$pending->join;
 
   $in->shutdown;
   $out->shutdown;
