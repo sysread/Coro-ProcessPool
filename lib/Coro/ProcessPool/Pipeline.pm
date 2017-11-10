@@ -32,12 +32,22 @@ collecting results. A pool may have multiple pipelines.
 package Coro::ProcessPool::Pipeline;
 # ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
 
-use Moo;
-use Types::Standard qw(-types);
 use Carp;
 use Coro;
-use Coro::AnyEvent;
-use Coro::Channel;
+
+sub new {
+  my ($class, %param) = @_;
+  my $pool = $param{pool} || croak 'expected parameter "pool"';
+
+  bless {
+    pool          => $pool,
+    auto_shutdown => $param{auto_shutdown} || 0,
+    shutting_down => 0,
+    is_shutdown   => 0,
+    num_pending   => 0,
+    complete      => Coro::Channel->new,
+  }, $class;
+}
 
 =head1 ATTRIBUTES
 
@@ -45,68 +55,11 @@ use Coro::Channel;
 
 The L<Coro::ProcessPool> in which to queue tasks.
 
-=cut
-
-has pool => (
-  is     => 'ro',
-  isa    => InstanceOf['Coro::ProcessPool'],
-  required => 1,
-);
-
 =head2 auto_shutdown (default: false)
 
 When set to true, the pipeline will shut itself down as soon as the number of
 pending tasks hits zero. At least one task must be sent for this to be
 triggered.
-
-=cut
-
-has auto_shutdown => (
-  is     => 'rw',
-  isa    => Bool,
-  default  => sub { 0 },
-);
-
-#-------------------------------------------------------------------------------
-# Internal flag to signal that no more tasks should be accepted.
-#-------------------------------------------------------------------------------
-has shutting_down => (
-  is     => 'rw',
-  isa    => Bool,
-  init_arg => undef,
-  default  => sub { 0 },
-);
-
-#-------------------------------------------------------------------------------
-# Internal flag to mark the pipeline has having been shut down.
-#-------------------------------------------------------------------------------
-has is_shutdown => (
-  is     => 'rw',
-  isa    => Bool,
-  init_arg => undef,
-  default  => sub { 0 },
-);
-
-#-------------------------------------------------------------------------------
-# In tandem with shutting_down and auto_shutdown, determines when it is
-# appropriate to automatically shutdown the queue.
-#-------------------------------------------------------------------------------
-has num_pending => (
-  is     => 'rw',
-  isa    => Int,
-  init_arg => undef,
-  default  => sub { 0 },
-);
-
-#-------------------------------------------------------------------------------
-# Stores complete results and provides the 'next' method.
-#-------------------------------------------------------------------------------
-has complete => (
-  is     => 'ro',
-  isa    => InstanceOf['Coro::Channel'],
-  init_arg => undef,
-  default  => sub { Coro::Channel->new() },
-);
 
 =head1 METHODS
 
@@ -119,7 +72,7 @@ available.
 
 sub next {
   my $self = shift;
-  my $finished = $self->complete->get or return;
+  my $finished = $self->{complete}->get or return;
   my ($result, $error) = @$finished;
   if ($error) {
     croak $error;
@@ -137,23 +90,23 @@ L<Coro::ProcessPool/defer>.
 
 sub queue {
   my ($self, @args) = @_;
-  croak 'pipeline is shut down' if $self->is_shutdown;
-  croak 'pipeline is shutting down' if $self->shutting_down;
+  croak 'pipeline is shut down' if $self->{is_shutdown};
+  croak 'pipeline is shutting down' if $self->{shutting_down};
 
-  my $deferred = $self->pool->defer(@args);
+  my $deferred = $self->{pool}->defer(@args);
 
   async_pool {
     my ($self, $deferred) = @_;
     my $result = eval { $deferred->recv };
 
-    $self->complete->put([$result, $@]);
+    $self->{complete}->put([$result, $@]);
     --$self->{num_pending};
 
-    if ($self->num_pending == 0) {
-      if ($self->shutting_down || $self->auto_shutdown) {
-        $self->complete->shutdown;
-        $self->is_shutdown(1);
-        $self->shutting_down(0);
+    if ($self->{num_pending} == 0) {
+      if ($self->{shutting_down} || $self->{auto_shutdown}) {
+        $self->{complete}->shutdown;
+        $self->{is_shutdown} = 1;
+        $self->{shutting_down} = 0;
       }
     }
   } $self, $deferred;
@@ -169,7 +122,7 @@ Signals shutdown of the pipeline. A shutdown pipeline may not be reused.
 
 sub shutdown {
   my $self = shift;
-  $self->shutting_down(1);
+  $self->{shutting_down} = 1;
 }
 
 1;

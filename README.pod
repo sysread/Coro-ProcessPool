@@ -8,7 +8,7 @@ Coro::ProcessPool - An asynchronous pool of perl processes
 
 =head1 VERSION
 
-version 0.26_006
+version 0.26_007
 
 =head1 SYNOPSIS
 

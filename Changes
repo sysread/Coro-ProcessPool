@@ -2,6 +2,7 @@
 - Update to Coro 6.514 (experimental support for perls >= 5.22)
 - Better support for closures using Data::Dump::Streamer
 - Refactor, simplify, and modernize
+- Dropped dependencies on Moo, Type::Tiny, and a few others
 - Backward incompatible changes:
   - Coro::ProcessPool->defer returns an AnyEvent::CondVar instead of wrapping
     on in an anonymous sub which calls $cv->recv. This is to provide the caller

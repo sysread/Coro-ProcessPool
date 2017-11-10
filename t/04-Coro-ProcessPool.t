@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use Test2::Bundle::Extended;
-use Sub::Override;
 use Coro;
 use Coro::ProcessPool;
 use Coro::ProcessPool::Util qw($CPUS);

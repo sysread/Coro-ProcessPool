@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Coro;
 use Coro::AnyEvent;
-use Guard qw(scope_guard);
 use List::Util qw(shuffle);
 use Test::More;
 use Coro::ProcessPool;
@@ -22,7 +21,6 @@ sub error {
 }
 
 my $pool = Coro::ProcessPool->new(max_procs => 2);
-scope_guard { $pool->shutdown };
 
 subtest 'basic' => sub {
   my $pipeline = new_ok($class, [pool => $pool]);
@@ -111,5 +109,8 @@ subtest 'from pool' => sub {
 
   is($received, scalar(@range), 'correct number of results');
 };
+
+$pool->shutdown;
+$pool->join;
 
 done_testing;
