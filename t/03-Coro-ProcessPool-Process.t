@@ -2,14 +2,31 @@ use strict;
 use warnings;
 use Test2::Bundle::Extended;
 use Coro;
-use Coro::Timer qw(timeout);
+use Coro::AnyEvent;
 use Coro::ProcessPool::Process qw(worker);
 
 bail_out 'OS unsupported' if $^O eq 'MSWin32';
 
 sub double { $_[0] * 2 }
 
-subtest 'start/stop' => sub {
+sub timed_test ($&) {
+  my ($name, $test) = @_;
+
+  subtest $name => sub {
+    my $work = async { $_[0]->() } $test;
+
+    my $timer = async {
+      Coro::AnyEvent::sleep(30);
+      $work->throw('timed out');
+    };
+
+    $work->join;
+    $timer->cancel;
+    ok 'test did not time out';
+  };
+}
+
+timed_test 'start/stop' => sub {
   ok my $proc = worker, 'spawn';
   ok !$proc->alive, 'prenatal';
 
@@ -21,7 +38,7 @@ subtest 'start/stop' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'send/recv' => sub {
+timed_test 'send/recv' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -36,7 +53,7 @@ subtest 'send/recv' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'multiple' => sub {
+timed_test 'multiple' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
@@ -57,7 +74,7 @@ subtest 'multiple' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'include' => sub {
+timed_test 'include' => sub {
   ok my $proc = worker(include => ['./t']), 'spawn';
   $proc->await;
 
@@ -69,7 +86,7 @@ subtest 'include' => sub {
   ok !$proc->alive, 'stopped';
 };
 
-subtest 'join' => sub {
+timed_test 'join' => sub {
   ok my $proc = worker, 'spawn';
   $proc->await;
 
