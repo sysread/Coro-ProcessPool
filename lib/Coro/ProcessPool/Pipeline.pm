@@ -30,7 +30,6 @@ collecting results. A pool may have multiple pipelines.
 =cut
 
 package Coro::ProcessPool::Pipeline;
-
 # ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
 
 use Moo;
@@ -131,8 +130,8 @@ sub next {
 
 =head2 queue($task, $args)
 
-Queues a new task. Arguments are identical to L<Coro::ProcessPool::process> and
-L<Coro::ProcessPool::defer>.
+Queues a new task. Arguments are identical to L<Coro::ProcessPool/process> and
+L<Coro::ProcessPool/defer>.
 
 =cut
 
@@ -141,19 +140,19 @@ sub queue {
   croak 'pipeline is shut down' if $self->is_shutdown;
   croak 'pipeline is shutting down' if $self->shutting_down;
 
-  unless ($self->pool->is_running) {
-    unless ($self->is_shutdown || $self->shutting_down) {
-      $self->shutdown;
-    }
-
-    croak 'pool is not running';
-  }
+#  unless ($self->pool->is_running) {
+#    unless ($self->is_shutdown || $self->shutting_down) {
+#      $self->shutdown;
+#    }
+#
+#    croak 'pool is not running';
+#  }
 
   my $deferred = $self->pool->defer(@args);
 
   async_pool {
     my ($self, $deferred) = @_;
-    my $result = eval { $deferred->() };
+    my $result = eval { $deferred->recv };
 
     $self->complete->put([$result, $@]);
     --$self->{num_pending};

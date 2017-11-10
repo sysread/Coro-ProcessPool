@@ -4,7 +4,7 @@
 
 =head1 NAME
 
-Coro::ProcessPool - An asynchronous process pool
+Coro::ProcessPool - An asynchronous pool of perl processes
 
 =head1 VERSION
 

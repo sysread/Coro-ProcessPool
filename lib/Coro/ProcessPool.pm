@@ -1,3 +1,122 @@
+package Coro::ProcessPool;
+# ABSTRACT: An asynchronous pool of perl processes
+
+use strict;
+use warnings;
+use Coro;
+use AnyEvent;
+use Coro::Countdown;
+use Coro::ProcessPool::Process qw(worker);
+use Coro::ProcessPool::Util qw($CPUS);
+
+sub new{
+  my ($class, %param) = @_;
+
+  my $self = bless{
+    max_procs => $param{max_procs} || $CPUS,
+    max_reqs  => $param{max_reqs},
+    include   => $param{include},
+    queue     => Coro::Channel->new,
+    pool      => Coro::Channel->new,
+  }, $class;
+
+  for (1 .. $self->{max_procs}) {
+    $self->{pool}->put($self->_proc);
+  }
+
+  $self->{worker} = async(\&_worker, $self);
+
+  return $self;
+}
+
+sub _proc{
+  my $self = shift;
+  worker(include => $self->{include});
+}
+
+sub _worker{
+  my $self = shift;
+
+  while (my $task = $self->{queue}->get) {
+    my ($caller, $f, @args) = @$task;
+
+    WORKER:
+    my $ps = $self->{pool}->get;
+    $ps->await;
+
+    if ($self->{max_reqs} && $ps->{counter} >= $self->{max_reqs}) {
+      async_pool{ my $ps = shift; $ps->stop; $ps->join; } $ps;
+      $self->{pool}->put($self->_proc);
+      goto WORKER;
+    }
+
+    $ps->await;
+    my $cv = $ps->send($f, \@args);
+
+    async_pool{
+      my ($k, $cv) = @_;
+      my $ret = eval{ $cv->recv };
+      $@ ? $k->croak($@) : $k->send($ret);
+    } $caller, $cv;
+
+    $self->{pool}->put($ps);
+  }
+
+  my @procs;
+  $self->{pool}->shutdown;
+  while (my $ps = $self->{pool}->get) {
+    push @procs, $ps;
+  }
+
+  $_->await foreach @procs;
+  $_->stop  foreach @procs;
+  $_->join  foreach @procs;
+}
+
+sub shutdown{
+  my $self = shift;
+  $self->{queue}->shutdown;
+}
+
+sub join{
+  my $self = shift;
+  $self->{worker}->join;
+}
+
+sub defer{
+  my $self = shift;
+  my $cv = AE::cv;
+  $self->{queue}->put([$cv, @_]);
+  return $cv;
+}
+
+sub process{
+  my $self = shift;
+  $self->defer(@_)->recv;
+}
+
+sub map {
+  my ($self, $f, @args) = @_;
+  my $rem = new Coro::Countdown;
+  my @def = map { $rem->up; $self->defer($f, $_) } @args;
+  my @res;
+
+  foreach my $i (0 .. $#args) {
+    async_pool {
+      $res[$i] = $_[0]->recv;
+      $rem->down;
+    } $def[$i];
+  }
+
+  $rem->join;
+  return @res;
+}
+
+sub pipeline {
+  my $self = shift;
+  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
+}
+
 =head1 SYNOPSIS
 
   use Coro::ProcessPool;
@@ -12,11 +131,11 @@
   my $double = sub { $_[0] * 2 };
 
   #-----------------------------------------------------------------------
-  # Process in sequence
+  # Process in sequence, waiting for each result in turn
   #-----------------------------------------------------------------------
   my %result;
   foreach my $i (1 .. 1000) {
-    $result{$i} = $pool->process($double, [$i]);
+    $result{$i} = $pool->process($double, $i);
   }
 
   #-----------------------------------------------------------------------
@@ -27,13 +146,18 @@
   #-----------------------------------------------------------------------
   # Defer waiting for result
   #-----------------------------------------------------------------------
-  my %deferred = map { $_ => $pool->defer($double, [$_]) } 1 .. 1000);
+  my %deferred;
+
+  $deferred{$_} = $pool->defer($double, $_)
+    foreach 1 .. 1000;
+
+  # Later
   foreach my $i (keys %deferred) {
     print "$i = " . $deferred{$i}->() . "\n";
   }
 
   #-----------------------------------------------------------------------
-  # Use a "task class", implementing 'new' and 'run'
+  # Use a "task class" implementing 'new' and 'run'
   #-----------------------------------------------------------------------
   my $result = $pool->process('Task::Doubler', 21);
 
@@ -63,7 +187,13 @@
 
 Processes tasks using a pool of external Perl processes.
 
-=head1 ATTRIBUTES
+=head1 CONSTRUCTOR
+
+  my $pool = Coro::ProcessPool->new(
+    max_procs => 4,
+    max_reqs  => 100,
+    include   => ['path/to/my/packages', 'some/more/packages'],
+  );
 
 =head2 max_procs
 
@@ -81,55 +211,30 @@ memory over time.
 An optional array ref of directory paths to prepend to the set of directories
 the worker process will use to find Perl packages.
 
-=head1 PRIVATE ATTRIBUTES
-
-=head2 is_running
-
-Boolean which signals to the instance that the C<shutdown> method has been
-called.
-
 =head1 METHODS
-
-=head2 capacity
-
-Returns the number of free worker processes.
 
 =head2 shutdown
 
-Shuts down all processes and resets state on the process pool. After calling
-this method, the pool is effectively in a new state and may be used normally.
+Tells the pool to terminate after all pending tasks have been completed. Note
+that this does not prevent new tasks from being queued or even processed. Once
+called, use L</join> to safely wait until the final task has completed and the
+pool is no longer running.
 
-=head2 process($f, $args)
+=head2 join
 
-Processes code ref C<$f> in a child process from the pool. If C<$args> is
-provided, it is an array ref of arguments that will be passed to C<$f>. Returns
-the result of calling $f->(@$args).
+Cedes control to the event loop until the pool is shutdown and has completed
+all tasks. If called I<before> L</shutdown>, take care to ensure that another
+thread is responsible for shutting down the pool.
 
-Alternately, C<$f> may be the name of a class implementing the methods C<new>
-and C<run>, in which case the result is equivalent to calling
-$f->new(@$args)->run(). Note that the include path for worker processes is
-identical to that of the calling process.
+=head2 defer
 
-This call will yield until the results become available. If all processes are
-busy, this method will block until one becomes available. Processes are spawned
-as needed, up to C<max_procs>, from this method. Also note that the use of
-C<max_reqs> can cause this method to yield while a new process is spawned.
+Queues a task to be processed by the pool. Tasks may come in two forms, as a
+code ref or the fully qualified name of a perl class which implements two
+methods, C<new> and C<run>.
 
-=head2 map($f, @args)
+=head2 process
 
-Applies C<$f> to each value in C<@args> in turn and returns a list of the
-results. Although the order in which each argument is processed is not
-guaranteed, the results are guaranteed to be in the same order as C<@args>,
-even if the result of calling C<$f> returns a list itself (in which case, the
-results of that calcuation is flattened into the list returned by C<map>.
-
-=head2 defer($f, $args)
-
-Similar to L<./process>, but returns immediately. The return value is a code
-reference that, when called, returns the results of calling C<$f->(@$args)>.
-
-  my $deferred = $pool->defer($coderef, [ $x, $y, $z ]);
-  my $result   = $deferred->();
+=head2 map
 
 =head2 pipeline
 
@@ -237,159 +342,5 @@ process pool on Windows:
 =back
 
 =cut
-
-package Coro::ProcessPool;
-
-# ABSTRACT: An asynchronous process pool
-
-use Moo;
-use Types::Standard qw(-types);
-use Carp;
-use AnyEvent;
-use Guard;
-use Coro;
-use Coro::AnyEvent qw(sleep);
-use Coro::ProcessPool::Process qw(worker);
-use Coro::ProcessPool::Util;
-use Coro::Semaphore;
-require Coro::ProcessPool::Pipeline;
-
-if ($^O eq 'MSWin32') {
-  die 'MSWin32 is not supported';
-}
-
-has max_procs => (
-  is      => 'ro',
-  isa     => Int,
-  default => sub { Coro::ProcessPool::Util::cpu_count() },
-);
-
-has max_reqs => (
-  is      => 'ro',
-  isa     => Int,
-  default => sub { 0 },
-);
-
-has include => (
-  is      => 'ro',
-  isa     => ArrayRef[Str],
-  default => sub { [] },
-);
-
-has pschan => (
-  is => 'lazy',
-  isa => InstanceOf['Coro::Channel'],
-  handles => {
-    checkout_proc => 'get',
-    checkin_proc  => 'put',
-  },
-);
-
-sub _build_pschan {
-  my $self = shift;
-  Coro::Channel->new($self->max_procs + 1);
-}
-
-has is_running => (
-  is      => 'rw',
-  isa     => Bool,
-  default => sub { 1 },
-);
-
-sub DEMOLISH {
-  my $self = shift;
-  if ($self->is_running) {
-    $self->shutdown;
-  }
-}
-
-sub BUILD {
-  my $self = shift;
-  for (1 .. $self->max_procs) {
-    $self->pschan->put($self->start_proc);
-  }
-}
-
-sub start_proc {
-  my $self = shift;
-  my $proc = worker(include => $self->include);
-  $proc->await;
-  return $proc;
-}
-
-sub kill_proc {
-  my ($self, $proc) = @_;
-  $proc->stop;
-  $proc->join;
-}
-
-before [qw(start_proc checkout_proc queue)] => sub {
-  my $self = shift;
-  die 'not running' unless $self->is_running;
-};
-
-around checkin_proc => sub {
-  my $orig = shift;
-  my $self = shift;
-  my $proc = shift;
-
-  unless ($self->is_running) {
-    $self->kill_proc($proc);
-    return;
-  }
-
-  if (!$proc->alive || ($self->max_reqs && $proc->{counter} >= $self->max_reqs)) {
-    $self->kill_proc($proc);
-    $self->$orig( $self->start_proc );
-  }
-  else {
-    $self->$orig($proc);
-  }
-};
-
-sub capacity {
-  my $self = shift;
-  $self->max_procs - ($self->max_procs - $self->pschan->size);
-}
-
-sub shutdown {
-  my $self = shift;
-
-  $self->pschan->shutdown;
-
-  while (my $proc = $self->checkout_proc) {
-    $self->kill_proc($proc);
-  }
-
-  $self->is_running(0);
-
-  return;
-}
-
-sub queue {
-  my ($self, $f, $args) = @_;
-  my $proc = $self->checkout_proc;
-  scope_guard { $self->checkin_proc($proc) };
-  $proc->send($f, $args);
-}
-
-sub process { shift->queue(@_)->recv }
-
-sub defer {
-  my $self = shift;
-  my $cv = $self->queue(@_);
-  return sub{ $cv->recv };
-}
-
-sub map {
-  my ($self, $f, @args) = @_;
-  my @deferred = map { $self->defer($f, [$_]) } @args;
-  return map { $_->() } @deferred;
-}
-
-sub pipeline {
-  my $self = shift;
-  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
-}
 
 1;

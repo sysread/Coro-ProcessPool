@@ -2,6 +2,19 @@
 - Update to Coro 6.514 (experimental support for perls >= 5.22)
 - Better support for closures using Data::Dump::Streamer
 - Refactor, simplify, and modernize
+- Backward incompatible changes:
+  - Coro::ProcessPool->defer returns an AnyEvent::CondVar instead of wrapping
+    on in an anonymous sub which calls $cv->recv. This is to provide the caller
+    with more flexibility with the result.
+  - Coro::ProcessPool->(defer|process|map) no longer accept an array ref of
+    arguments to be passed to the function in the worker process. Instead, the
+    entire argument list is used (e.g. $pool->process(\&func, 1, 2, 3) instead
+    of $pool->process(\&func, [1, 2, 3])). This is to simplify the code and
+    require fewer function-local assignments, which reduces stack overhead for
+    large arguments. Note that this has implications for the map method, which
+    now behaves more like perl's map.
+  - Coro::ProcessPool->shutdown no longer leaves the pool in a usable state;
+    start a new pool instead.
 
 0.26 2015-06-09
 - More reliable process management

@@ -16,7 +16,7 @@ sub run {
 
   $out->print($$ . $EOL);
 
-  my $pending = new Coro::Countdown;
+  #my $pending = new Coro::Countdown;
 
   while (my $line = $in->readline($EOL)) {
     my ($id, $task, $args) = decode($line);
@@ -25,17 +25,13 @@ sub run {
       last;
     }
 
-    $pending->up;
-
-    async_pool {
-      my ($out, $id, $task, $args) = @_;
-      my ($error, $result) = process_task($task, $args);
-      $out->print(encode($id, $error, $result) . $EOL);
-      $pending->down;
-    } $out, $id, $task, $args;
+    #$pending->up;
+    my ($error, $result) = process_task($task, $args);
+    $out->print(encode($id, $error, $result) . $EOL);
+    #$pending->down;
   }
 
-  $pending->join;
+  #$pending->join;
 
   $in->shutdown;
   $out->shutdown;

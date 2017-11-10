@@ -21,9 +21,11 @@ our @EXPORT_OK = qw(
   encode
   decode
   $EOL
+  $CPUS
 );
 
-const our $EOL => "\n";
+const our $EOL  => "\n";
+const our $CPUS => cpu_count();
 
 my $ENCODER = Sereal::Encoder->new();
 my $DECODER = Sereal::Decoder->new();
@@ -52,7 +54,7 @@ sub encode {
 sub decode {
   my $line = shift or croak 'decode: expected line';
   my $pickled = decode_base64($line);
-  my $package = sereal_decode_with_object($DECODER, $pickled);
+  sereal_decode_with_object($DECODER, $pickled, my $package);
 
   my ($id, $info, $data) = @{$package}{qw(id info data)};
 

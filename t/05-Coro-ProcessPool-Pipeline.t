@@ -30,7 +30,7 @@ subtest 'basic' => sub {
 
   my $producer = async {
     foreach my $i (shuffle @range) {
-      $pipeline->queue(\&double, [$i]);
+      $pipeline->queue(\&double, $i);
     }
 
     $pipeline->shutdown;
@@ -55,7 +55,7 @@ subtest 'basic' => sub {
 
 subtest 'errors' => sub {
   my $pipeline = new_ok($class, [pool => $pool]);
-  $pipeline->queue(\&error, []);
+  $pipeline->queue(\&error);
   eval { $pipeline->next };
   like($@, qr/test error/, 'errors correctly triggered');
   $pipeline->shutdown;
@@ -67,7 +67,7 @@ subtest 'auto shutdown' => sub {
 
   my $producer = async {
     foreach my $i (shuffle @range) {
-      $pipeline->queue(\&double, [$i]);
+      $pipeline->queue(\&double, $i);
     }
   };
 
@@ -95,7 +95,7 @@ subtest 'from pool' => sub {
 
   my $producer = async {
     foreach my $i (shuffle @range) {
-      $pipeline->queue(\&double, [$i]);
+      $pipeline->queue(\&double, $i);
     }
 
     $pipeline->shutdown;
