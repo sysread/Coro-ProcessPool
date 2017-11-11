@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use Test2;
 use Test2::Bundle::Extended;
 use Coro;
 use Coro::ProcessPool;
