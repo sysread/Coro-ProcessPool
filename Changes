@@ -1,4 +1,8 @@
-{{NEXT}}
+{{$NEXT}}
+- Now based on AnyEvent::ProcessPool, significantly reducing amount of
+  complexity of code
+
+0.28 2017-11-10
 - Update to Coro 6.514 (experimental support for perls >= 5.22)
 - Better support for closures using Data::Dump::Streamer
 - Refactor, simplify, and modernize

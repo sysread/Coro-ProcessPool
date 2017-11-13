@@ -1,7 +1,3 @@
-=head1 NAME
-
-Coro::ProcessPool::Pipeline
-
 =head1 SYNOPSIS
 
   my $pool = Coro::ProcesPool->new();
@@ -32,8 +28,11 @@ collecting results. A pool may have multiple pipelines.
 package Coro::ProcessPool::Pipeline;
 # ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
 
+use strict;
+use warnings;
 use Carp;
 use Coro;
+use Try::Catch;
 
 sub new {
   my ($class, %param) = @_;
@@ -97,18 +96,24 @@ sub queue {
 
   async_pool {
     my ($self, $deferred) = @_;
-    my $result = eval { $deferred->recv };
 
-    $self->{complete}->put([$result, $@]);
-    --$self->{num_pending};
-
-    if ($self->{num_pending} == 0) {
-      if ($self->{shutting_down} || $self->{auto_shutdown}) {
-        $self->{complete}->shutdown;
-        $self->{is_shutdown} = 1;
-        $self->{shutting_down} = 0;
-      }
+    try {
+      my $result = $deferred->recv;
+      $self->{complete}->put([$result, undef]);
     }
+    catch {
+      $self->{complete}->put([undef, $_]);
+    }
+    finally {
+      if (--$self->{num_pending} == 0) {
+        if ($self->{shutting_down} || $self->{auto_shutdown}) {
+          $self->{complete}->shutdown;
+          $self->{is_shutdown} = 1;
+          $self->{shutting_down} = 0;
+        }
+      }
+    };
+
   } $self, $deferred;
 
   ++$self->{num_pending};

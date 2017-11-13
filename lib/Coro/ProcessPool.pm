@@ -4,114 +4,38 @@ package Coro::ProcessPool;
 use strict;
 use warnings;
 use Coro;
-use AnyEvent;
 use Coro::Countdown;
-use Coro::ProcessPool::Process qw(worker);
-use Coro::ProcessPool::Util qw($CPUS);
+use AnyEvent::ProcessPool;
 
-sub new{
+sub new {
   my ($class, %param) = @_;
 
-  my $self = bless{
-    max_procs => $param{max_procs} || $CPUS,
-    max_reqs  => $param{max_reqs},
-    include   => $param{include},
-    queue     => Coro::Channel->new,
-    pool      => Coro::Channel->new,
+  my $pool = AnyEvent::ProcessPool->new(
+    workers => $param{max_procs},
+    limit   => $param{max_reqs},
+  );
+
+  my $self = bless {
+    pool => $pool,
+    max_procs => $pool->{workers},
   }, $class;
-
-  # Initialize worker processes
-  for (1 .. $self->{max_procs}) {
-    $self->{pool}->put($self->_proc);
-  }
-
-  # Start pool worker
-  $self->{worker} = async(\&_worker, $self);
 
   return $self;
 }
 
-sub _proc{
+sub join {
   my $self = shift;
-  worker(include => $self->{include});
+  $self->{pool}->join;
 }
 
-sub _worker{
+sub defer {
   my $self = shift;
-
-  # Read tasks from the queue
-  while (my $task = $self->{queue}->get) {
-    my ($caller, $f, @args) = @$task;
-
-    # Wait for a worker process to become available
-    WORKER:
-    my $ps = $self->{pool}->get;
-
-    # If the worker has serviced at least as many requests as our
-    # limit, stop the worker process, put a new one into the pool,
-    # and REDO FROM START.
-    if ($self->{max_reqs} && $ps->{counter} >= $self->{max_reqs}) {
-      # No need to hold up the next task to deal with this
-      async_pool{
-        my $ps = shift;
-        $ps->stop;
-        $ps->join;
-      } $ps;
-
-      $self->{pool}->put($self->_proc);
-      goto WORKER;
-    }
-
-    # Ensure our worker is completely initialized
-    $ps->await;
-
-    # Send task to our worker process
-    my $cv = $ps->send($f, \@args);
-
-    # Schedule a thread to watch for the result and deliver it to the caller
-    async_pool{
-      my ($k, $cv) = @_;
-      my $ret = eval{ $cv->recv };
-      $@ ? $k->croak($@) : $k->send($ret);
-    } $caller, $cv;
-
-    # Return the worker to the pool
-    $self->{pool}->put($ps);
-  }
-
-  # The queue is shut down and no tasks remain. Notify workers to shut down.
-  my @procs;
-  $self->{pool}->shutdown;
-  while (my $ps = $self->{pool}->get) {
-    push @procs, $ps;
-  }
-
-  # Wait for all workers to self-terminate
-  $_->await foreach @procs; # some workers might have just been started
-  $_->stop  foreach @procs; # stop the workers
-  $_->join  foreach @procs; # wait on the process to completely terminate
+  $self->{pool}->async(@_)
 }
 
-sub shutdown{
+sub process {
   my $self = shift;
-  $self->{queue}->shutdown;
-}
-
-sub join{
-  my $self = shift;
-  $self->{worker}->join;
-}
-
-sub defer{
-  my $self = shift;
-  my $cv = AE::cv;
-  $self->{queue}->put([$cv, @_]);
-  return $cv;
-}
-
-sub process{
-  my $self = shift;
-  $self->defer(@_)->recv;
+  $self->{pool}->async(@_)->recv;
 }
 
 sub map {
@@ -243,18 +167,10 @@ the worker process will use to find Perl packages.
 
 =head1 METHODS
 
-=head2 shutdown
-
-Tells the pool to terminate after all pending tasks have been completed. Note
-that this does not prevent new tasks from being queued or even processed. Once
-called, use L</join> to safely wait until the final task has completed and the
-pool is no longer running.
-
 =head2 join
 
-Cedes control to the event loop until the pool is shutdown and has completed
-all tasks. If called I<before> L</shutdown>, take care to ensure that another
-thread is responsible for shutting down the pool.
+Cedes control to the event loop until the pool has completed all remaining
+tasks and woken up any threads watching them.
 
 =head2 defer
 

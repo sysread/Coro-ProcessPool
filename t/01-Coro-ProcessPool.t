@@ -16,10 +16,7 @@ sub pid { $$ }
 subtest 'life cycle' => sub{
   ok my $pool = Coro::ProcessPool->new, 'new';
   is $pool->{max_procs}, $CPUS, 'max_procs defaults correctly';
-  is $pool->{pool}->size, $CPUS, 'correct number of processes spawned';
-  $pool->shutdown;
   $pool->join;
-  is $pool->{pool}->size, 0, 'no processes remain after shutdown';
 };
 
 subtest 'defer' => sub{
@@ -29,13 +26,17 @@ subtest 'defer' => sub{
   ok $result{$_} = $pool->defer(\&double, $_), "defer $_"
     for 1 .. $COUNT;
 
-  $pool->shutdown;
-
   # Use keys(%hash) to randomize the order of resolution
   is $result{$_}->recv, $_ * 2, "resolve $_"
     for keys %result;
 
   $pool->join;
+};
+
+subtest 'errors' => sub{
+  my $pool = Coro::ProcessPool->new(max_procs => $PROCS);
+  ok my $cv = $pool->defer(sub{ die 'some error' }), 'defer';
+  like dies{ $cv->recv }, qr/some error/, 'error rethrown at appropriate time';
 };
 
 subtest 'max_reqs' => sub{
@@ -61,7 +62,6 @@ subtest 'max_reqs' => sub{
     ok $count{$_} <= 3, "pid $$ used no more than 3 times";
   }
 
-  $pool->shutdown;
   $pool->join;
 };
 
@@ -75,7 +75,6 @@ subtest 'process' => sub{
     is $pool->process(\&double, $_), $_ * 2, "process $_";
   }
 
-  $pool->shutdown;
   $pool->join;
 };
 
@@ -88,7 +87,6 @@ subtest 'map' => sub{
   my @result = $pool->map(\&double, 1 .. $COUNT);
   is \@result, [map { double($_) } 1 .. $COUNT], 'expected result';
 
-  $pool->shutdown;
   $pool->join;
 };
 
@@ -105,9 +103,6 @@ subtest 'two pools' => sub{
       is $result, $i * 2, 'expected result (pool 2)';
     }
   }
-
-  $pool2->shutdown;
-  $pool1->shutdown;
 
   $pool2->join;
   $pool1->join;
@@ -140,7 +135,6 @@ SKIP: {
       is $pending{$i}->recv, $expected{$i}, 'expected result';
     }
 
-    $pool->shutdown;
     $pool->join;
   };
 };

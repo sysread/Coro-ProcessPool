@@ -110,7 +110,6 @@ subtest 'from pool' => sub {
   is($received, scalar(@range), 'correct number of results');
 };
 
-$pool->shutdown;
 $pool->join;
 
 done_testing;

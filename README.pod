@@ -8,7 +8,7 @@ Coro::ProcessPool - An asynchronous pool of perl processes
 
 =head1 VERSION
 
-version 0.28
+version 0.29
 
 =head1 SYNOPSIS
 
@@ -106,18 +106,10 @@ the worker process will use to find Perl packages.
 
 =head1 METHODS
 
-=head2 shutdown
-
-Tells the pool to terminate after all pending tasks have been completed. Note
-that this does not prevent new tasks from being queued or even processed. Once
-called, use L</join> to safely wait until the final task has completed and the
-pool is no longer running.
-
 =head2 join
 
-Cedes control to the event loop until the pool is shutdown and has completed
-all tasks. If called I<before> L</shutdown>, take care to ensure that another
-thread is responsible for shutting down the pool.
+Cedes control to the event loop until the pool has completed all remaining
+tasks and woken up any threads watching them.
 
 =head2 defer
 
