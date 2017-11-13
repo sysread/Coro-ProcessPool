@@ -13,6 +13,7 @@ sub new {
   my $pool = AnyEvent::ProcessPool->new(
     workers => $param{max_procs},
     limit   => $param{max_reqs},
+    include => $param{include},
   );
 
   my $self = bless {
