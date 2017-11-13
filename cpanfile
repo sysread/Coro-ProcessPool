@@ -1,7 +1,7 @@
 requires 'perl', '5.010';
 
 requires 'AnyEvent'              => '7.14';
-requires 'AnyEvent::ProcessPool' => '0.05';
+requires 'AnyEvent::ProcessPool' => '0.06';
 requires 'Coro'                  => '6.514';
 requires 'Coro::Countdown'       => '0.02';
 
