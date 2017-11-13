@@ -1,74 +1,76 @@
-package Coro::ProcessPool;
 # ABSTRACT: An asynchronous pool of perl processes
+package Coro::ProcessPool {
+  use strict;
+  use warnings;
+  use Coro;
+  use Coro::Countdown;
+  use AnyEvent::ProcessPool;
 
-use strict;
-use warnings;
-use Coro;
-use Coro::Countdown;
-use AnyEvent::ProcessPool;
+  sub new {
+    my ($class, %param) = @_;
 
-sub new {
-  my ($class, %param) = @_;
+    my $pool = AnyEvent::ProcessPool->new(
+      workers => $param{max_procs},
+      limit   => $param{max_reqs},
+    );
 
-  my $pool = AnyEvent::ProcessPool->new(
-    workers => $param{max_procs},
-    limit   => $param{max_reqs},
-  );
+    my $self = bless {
+      pool => $pool,
+      max_procs => $pool->{workers},
+    }, $class;
 
-  my $self = bless {
-    pool => $pool,
-    max_procs => $pool->{workers},
-  }, $class;
-
-  return $self;
-}
-
-sub join {
-  my $self = shift;
-  $self->{pool}->join;
-}
-
-sub defer {
-  my $self = shift;
-  $self->{pool}->async(@_)
-}
-
-sub process {
-  my $self = shift;
-  $self->{pool}->async(@_)->recv;
-}
-
-sub map {
-  my ($self, $f, @args) = @_;
-
-  # Inverse semaphore to track pending requests
-  my $rem = new Coro::Countdown;
-
-  # Queue each argument and store as an ordered list to preserve original
-  # ordering of the argments
-  my @cvs = map {
-    $rem->up;
-    $self->defer($f, $_);
-  } @args;
-
-  # Collect results, retaining original ordering by respecting the orignial
-  # list index
-  my @res;
-  foreach my $i (0 .. $#args) {
-    async_pool {
-      $res[$i] = $_[0]->recv;
-      $rem->down;
-    } $cvs[$i];
+    return $self;
   }
 
-  # Wait for all requests to complete and return the result
-  $rem->join;
-  return @res;
-}
+  sub join {
+    my $self = shift;
+    $self->{pool}->join;
+  }
 
-sub pipeline {
-  my $self = shift;
-  return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
+  sub defer {
+    my $self = shift;
+    $self->{pool}->async(@_)
+  }
+
+  sub process {
+    my $self = shift;
+    $self->{pool}->async(@_)->recv;
+  }
+
+  sub map {
+    my ($self, $f, @args) = @_;
+
+    # Inverse semaphore to track pending requests
+    my $rem = new Coro::Countdown;
+
+    # Queue each argument and store as an ordered list to preserve original
+    # ordering of the argments
+    my @cvs = map {
+      $rem->up;
+      $self->defer($f, $_);
+    } @args;
+
+    # Collect results, retaining original ordering by respecting the orignial
+    # list index
+    my @res;
+    foreach my $i (0 .. $#args) {
+      async_pool {
+        $res[$i] = $_[0]->recv;
+        $rem->down;
+      } $cvs[$i];
+    }
+
+    # Wait for all requests to complete and return the result
+    $rem->join;
+    return @res;
+  }
+
+  sub pipeline {
+    my $self = shift;
+    return Coro::ProcessPool::Pipeline->new(pool => $self, @_);
+  }
+
+  1;
 }
 
 =head1 SYNOPSIS
@@ -318,5 +320,3 @@ process pool on Windows:
 =back
 
 =cut
-
-1;

@@ -2,7 +2,6 @@ use Test2;
 use Test2::Bundle::Extended;
 use Coro;
 use Coro::ProcessPool;
-use Coro::ProcessPool::Util qw($CPUS);
 
 bail_out 'OS unsupported' if $^O eq 'MSWin32';
 
@@ -15,7 +14,7 @@ sub pid { $$ }
 
 subtest 'life cycle' => sub{
   ok my $pool = Coro::ProcessPool->new, 'new';
-  is $pool->{max_procs}, $CPUS, 'max_procs defaults correctly';
+  ok $pool->{max_procs} > 0, 'max_procs defaults correctly';
   $pool->join;
 };
 

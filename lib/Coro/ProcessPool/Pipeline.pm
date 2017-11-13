@@ -1,3 +1,76 @@
+# ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
+package Coro::ProcessPool::Pipeline {
+  use strict;
+  use warnings;
+  use Carp;
+  use Coro;
+  use Try::Catch;
+
+  sub new {
+    my ($class, %param) = @_;
+    my $pool = $param{pool} || croak 'expected parameter "pool"';
+
+    bless {
+      pool          => $pool,
+      auto_shutdown => $param{auto_shutdown} || 0,
+      shutting_down => 0,
+      is_shutdown   => 0,
+      num_pending   => 0,
+      complete      => Coro::Channel->new,
+    }, $class;
+  }
+
+  sub next {
+    my $self = shift;
+    my $finished = $self->{complete}->get or return;
+    my ($result, $error) = @$finished;
+    if ($error) {
+      croak $error;
+    } else {
+      return $result;
+    }
+  }
+
+  sub queue {
+    my ($self, @args) = @_;
+    croak 'pipeline is shut down' if $self->{is_shutdown};
+    croak 'pipeline is shutting down' if $self->{shutting_down};
+
+    my $deferred = $self->{pool}->defer(@args);
+
+    async_pool {
+      my ($self, $deferred) = @_;
+
+      try {
+        my $result = $deferred->recv;
+        $self->{complete}->put([$result, undef]);
+      }
+      catch {
+        $self->{complete}->put([undef, $_]);
+      }
+      finally {
+        if (--$self->{num_pending} == 0) {
+          if ($self->{shutting_down} || $self->{auto_shutdown}) {
+            $self->{complete}->shutdown;
+            $self->{is_shutdown} = 1;
+            $self->{shutting_down} = 0;
+          }
+        }
+      };
+
+    } $self, $deferred;
+
+    ++$self->{num_pending};
+  }
+
+  sub shutdown {
+    my $self = shift;
+    $self->{shutting_down} = 1;
+  }
+
+  1;
+}
+
 =head1 SYNOPSIS
 
   my $pool = Coro::ProcesPool->new();
@@ -23,31 +96,6 @@
 Provides an iterative mechanism for feeding tasks into the process pool and
 collecting results. A pool may have multiple pipelines.
 
-=cut
-
-package Coro::ProcessPool::Pipeline;
-# ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
-
-use strict;
-use warnings;
-use Carp;
-use Coro;
-use Try::Catch;
-
-sub new {
-  my ($class, %param) = @_;
-  my $pool = $param{pool} || croak 'expected parameter "pool"';
-
-  bless {
-    pool          => $pool,
-    auto_shutdown => $param{auto_shutdown} || 0,
-    shutting_down => 0,
-    is_shutdown   => 0,
-    num_pending   => 0,
-    complete      => Coro::Channel->new,
-  }, $class;
-}
-
 =head1 ATTRIBUTES
 
 =head2 pool (required)
@@ -67,67 +115,13 @@ triggered.
 Cedes control until a previously queued task is complete and the result is
 available.
 
-=cut
-
-sub next {
-  my $self = shift;
-  my $finished = $self->{complete}->get or return;
-  my ($result, $error) = @$finished;
-  if ($error) {
-    croak $error;
-  } else {
-    return $result;
-  }
-}
-
 =head2 queue($task, $args)
 
 Queues a new task. Arguments are identical to L<Coro::ProcessPool/process> and
 L<Coro::ProcessPool/defer>.
-
-=cut
-
-sub queue {
-  my ($self, @args) = @_;
-  croak 'pipeline is shut down' if $self->{is_shutdown};
-  croak 'pipeline is shutting down' if $self->{shutting_down};
-
-  my $deferred = $self->{pool}->defer(@args);
-
-  async_pool {
-    my ($self, $deferred) = @_;
-
-    try {
-      my $result = $deferred->recv;
-      $self->{complete}->put([$result, undef]);
-    }
-    catch {
-      $self->{complete}->put([undef, $_]);
-    }
-    finally {
-      if (--$self->{num_pending} == 0) {
-        if ($self->{shutting_down} || $self->{auto_shutdown}) {
-          $self->{complete}->shutdown;
-          $self->{is_shutdown} = 1;
-          $self->{shutting_down} = 0;
-        }
-      }
-    };
-
-  } $self, $deferred;
-
-  ++$self->{num_pending};
-}
 
 =head2 shutdown
 
 Signals shutdown of the pipeline. A shutdown pipeline may not be reused.
 
 =cut
-
-sub shutdown {
-  my $self = shift;
-  $self->{shutting_down} = 1;
-}
-
-1;
