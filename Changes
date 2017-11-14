@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+0.30 2017-11-13
 - Include support was missing in AnyEvent::ProcessPool v.0.4. Bump version and
   reenabled support in calling code.
 - Use common::sense
