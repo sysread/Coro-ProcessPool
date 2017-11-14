@@ -28,8 +28,7 @@ collecting results. A pool may have multiple pipelines.
 package Coro::ProcessPool::Pipeline;
 # ABSTRACT: A producer/consumer pipeline for Coro::ProcessPool
 
-use strict;
-use warnings;
+use common::sense;
 use Carp;
 use Coro;
 use Try::Catch;

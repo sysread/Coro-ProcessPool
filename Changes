@@ -1,6 +1,7 @@
 {{$NEXT}}
 - Include support was missing in AnyEvent::ProcessPool v.0.4. Bump version and
   reenabled support in calling code.
+- Use common::sense
 
 0.29 2017-11-13
 - Now based on AnyEvent::ProcessPool, significantly reducing amount of

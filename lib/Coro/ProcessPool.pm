@@ -1,8 +1,7 @@
 package Coro::ProcessPool;
 # ABSTRACT: An asynchronous pool of perl processes
 
-use strict;
-use warnings;
+use common::sense;
 use Coro;
 use Coro::Countdown;
 use AnyEvent::ProcessPool;
